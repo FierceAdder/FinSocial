@@ -170,4 +170,4 @@ Required:
 Optional but recommended:
 - `NEWSAPI_KEY` — for live news feed
 - `SENDGRID_API_KEY` — for email notifications
-- `SENTRY_DSN` — error tracking
+
