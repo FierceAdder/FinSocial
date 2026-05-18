@@ -2,16 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
+const { createOriginCallback } = require('./utils/corsOrigins');
 
 const app = express();
 
-// CORS
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',');
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
+  origin: createOriginCallback(process.env.CORS_ORIGIN),
   credentials: true,
 }));
 

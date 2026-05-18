@@ -2,13 +2,12 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const prisma = require('./utils/prisma');
 const logger = require('./utils/logger');
+const { createOriginCallback } = require('./utils/corsOrigins');
 
 module.exports = (server) => {
-  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',');
-
   const io = new Server(server, {
     cors: {
-      origin: allowedOrigins,
+      origin: createOriginCallback(process.env.CORS_ORIGIN),
       methods: ['GET', 'POST'],
       credentials: true,
     }
