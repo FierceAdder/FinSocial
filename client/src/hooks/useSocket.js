@@ -5,6 +5,13 @@ import useStore from '../store';
 let sharedSocket = null;
 let currentToken = null;
 
+/** Production: set VITE_BACKEND_URL to your API origin (e.g. https://xxx.onrender.com). Vercel cannot proxy WebSockets. */
+function socketBaseUrl() {
+  const raw = import.meta.env.VITE_BACKEND_URL;
+  if (typeof raw === 'string' && raw.trim()) return raw.replace(/\/$/, '');
+  return undefined;
+}
+
 function ensureSocket(token) {
   if (!token) {
     if (sharedSocket) {
@@ -23,7 +30,10 @@ function ensureSocket(token) {
     sharedSocket.disconnect();
   }
 
-  sharedSocket = io('/', { auth: { token }, transports: ['websocket', 'polling'] });
+  const origin = socketBaseUrl();
+  const opts = { auth: { token }, transports: ['websocket', 'polling'] };
+  // No origin → same host as the page (local dev: Vite proxies /socket.io)
+  sharedSocket = origin ? io(origin, opts) : io(opts);
   currentToken = token;
   return sharedSocket;
 }

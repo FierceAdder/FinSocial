@@ -1,5 +1,5 @@
 # Stage 1: Build the React client
-FROM node:20-slim AS client-builder
+FROM node:22-slim AS client-builder
 WORKDIR /client
 COPY client/package*.json ./
 RUN npm ci
