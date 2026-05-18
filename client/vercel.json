@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://finsocial-core-api-latest.onrender.com/api/:path*"
+    },
+    {
+      "source": "/socket.io/:path*",
+      "destination": "https://finsocial-core-api-latest.onrender.com/socket.io/:path*"
+    }
+  ]
+}

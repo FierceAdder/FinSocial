@@ -2,7 +2,8 @@ const axios = require('axios');
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 
-const ML_URL = `http://${process.env.ML_SERVICE_HOST || 'localhost'}:${process.env.ML_SERVICE_PORT || 5001}`;
+const { mlBaseUrl } = require('../utils/serviceUrls');
+const ML_URL = mlBaseUrl();
 
 exports.getPortfolio = async (req, res) => {
   try {

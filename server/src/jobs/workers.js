@@ -3,8 +3,9 @@ const axios = require('axios');
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 
-const ML_URL = `http://${process.env.ML_SERVICE_HOST || 'localhost'}:${process.env.ML_SERVICE_PORT || 5001}`;
-const GEN_AI_URL = `http://${process.env.GEN_AI_SERVICE_HOST || 'localhost'}:${process.env.GEN_AI_SERVICE_PORT || 5002}`;
+const { mlBaseUrl, genAiBaseUrl } = require('../utils/serviceUrls');
+const ML_URL = mlBaseUrl();
+const GEN_AI_URL = genAiBaseUrl();
 const { fetchAndStoreNews } = require('../services/newsFetcher');
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 

@@ -1,16 +1,12 @@
 const Queue = require('bull');
+const { getRedisUrl } = require('../utils/redisUrl');
 
-const redisOptions = {
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT) || 6379,
-  }
-};
+const redisUrl = getRedisUrl();
 
-const feedQueue = new Queue('feed-updates', redisOptions);
-const leaderboardQueue = new Queue('leaderboard-updates', redisOptions);
-const signalQueue = new Queue('signal-updates', redisOptions);
-const notificationQueue = new Queue('notifications', redisOptions);
+const feedQueue = new Queue('feed-updates', redisUrl);
+const leaderboardQueue = new Queue('leaderboard-updates', redisUrl);
+const signalQueue = new Queue('signal-updates', redisUrl);
+const notificationQueue = new Queue('notifications', redisUrl);
 
 const setupJobs = () => {
   // Refresh ML signals every 15 minutes

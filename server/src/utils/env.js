@@ -10,15 +10,16 @@ const REQUIRED = [
 
 const OPTIONAL_WITH_DEFAULTS = {
   JWT_REFRESH_SECRET: null,
-  REDIS_HOST: 'localhost',
-  REDIS_PORT: '6379',
+  REDIS_URL: null,
   PORT: '5000',
   NODE_ENV: 'development',
   CORS_ORIGIN: 'http://localhost:5173',
   ML_SERVICE_HOST: 'localhost',
   ML_SERVICE_PORT: '5001',
+  ML_SERVICE_URL: null,
   GEN_AI_SERVICE_HOST: 'localhost',
   GEN_AI_SERVICE_PORT: '5002',
+  GEN_AI_SERVICE_URL: null,
   SENTRY_DSN: null,
   SENDGRID_API_KEY: null,
   NEWSAPI_KEY: null,

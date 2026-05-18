@@ -37,8 +37,7 @@ services:
       - ./server/.env
     environment:
       DATABASE_URL: postgresql://finsocial:${POSTGRES_PASSWORD:-finsocial_dev}@postgres:5432/finsocial_db
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
       ML_SERVICE_HOST: ml-service
       ML_SERVICE_PORT: 5001
       GEN_AI_SERVICE_HOST: gen-ai-service

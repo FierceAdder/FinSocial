@@ -2,7 +2,8 @@ const axios = require('axios');
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 
-const GEN_AI_URL = `http://${process.env.GEN_AI_SERVICE_HOST || 'localhost'}:${process.env.GEN_AI_SERVICE_PORT || 5002}`;
+const { genAiBaseUrl } = require('../utils/serviceUrls');
+const GEN_AI_URL = genAiBaseUrl();
 
 exports.getQuestions = async (req, res) => {
   try {
