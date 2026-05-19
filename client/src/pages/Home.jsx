@@ -32,88 +32,6 @@ const Home = () => {
   const [signalsReady, setSignalsReady] = useState(false);
   const [signalsError, setSignalsError] = useState(null);
   const [signalsRefreshMsg, setSignalsRefreshMsg] = useState(null);
-  const [dashLoading, setDashLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDashLoading(true);
-    Promise.all([
-      apiClient.get('/stocks').catch(() => ({ data: [] })),
-      apiClient.get('/portfolio').catch(() => ({ data: null })),
-      apiClient.get('/feed').catch(() => ({ data: [] })),
-    ])
-      .then(([stocksRes, portfolioRes, feedRes]) => {
-        if (cancelled) return;
-        const raw = stocksRes.data;
-        const list = Array.isArray(raw) ? raw : [];
-        setTrendingTickers(list.slice(0, 8).map((s) => ({
-          tickerDisplay: s.displayTicker || s.ticker,
-          tickerFull: s.ticker,
-          price: s.price,
-          chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
-          up: s.changePct >= 0,
-          id: s.id,
-        })));
-
-        if (portfolioRes.data) setPortfolioStats(portfolioRes.data);
-        const feed = Array.isArray(feedRes.data) ? feedRes.data : [];
-        setFeedItems(feed.slice(0, 6));
-      })
-      .finally(() => {
-        if (!cancelled) setDashLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    loadSignals(false);
-  }, []);
-
-  useEffect(() => {
-    setChartLoading(true);
-    apiClient
-      .get('/stocks/RELIANCE.NS', { params: { range: '2y' } })
-      .then((r) => {
-        setChartBaseHistory(r.data.history || []);
-        setChartInterval(r.data.historyInterval || '1d');
-      })
-      .catch(() => setChartBaseHistory([]))
-      .finally(() => setChartLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (chartRange !== '1d') return;
-    setChartLoading(true);
-    apiClient
-      .get('/stocks/RELIANCE.NS', { params: { range: '1d' } })
-      .then((r) => {
-        setChart1dHistory(r.data.history || []);
-        setChartInterval(r.data.historyInterval || 'intraday');
-      })
-      .catch(() => setChart1dHistory([]))
-      .finally(() => setChartLoading(false));
-  }, [chartRange]);
-
-  useEffect(() => {
-    if (chartRange === '1d') {
-      setChartData(historyToChartData(chart1dHistory, '1d', chartInterval));
-    } else {
-      setChartData(historyToChartData(chartBaseHistory, chartRange, '1d'));
-    }
-  }, [chartRange, chartBaseHistory, chart1dHistory, chartInterval]);
-
-  useEffect(() => {
-    if (leaderboardData[period] !== undefined) return;
-    apiClient
-      .get(`/leaderboard?period=${period}`)
-      .then((r) => {
-        const rows = Array.isArray(r.data) ? r.data : [];
-        setLeaderboardData((prev) => ({ ...prev, [period]: rows }));
-      })
-      .catch(() => {
-        setLeaderboardData((prev) => ({ ...prev, [period]: [] }));
-      });
-  }, [period, leaderboardData]);
 
   const loadSignals = async (refresh = false) => {
     if (refresh) {
@@ -169,6 +87,83 @@ const Home = () => {
       setNewsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      apiClient.get('/stocks').catch(() => ({ data: [] })),
+      apiClient.get('/portfolio').catch(() => ({ data: null })),
+      apiClient.get('/feed').catch(() => ({ data: [] })),
+    ])
+      .then(([stocksRes, portfolioRes, feedRes]) => {
+        if (cancelled) return;
+        const raw = stocksRes.data;
+        const list = Array.isArray(raw) ? raw : [];
+        setTrendingTickers(list.slice(0, 8).map((s) => ({
+          tickerDisplay: s.displayTicker || s.ticker,
+          tickerFull: s.ticker,
+          price: s.price,
+          chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
+          up: s.changePct >= 0,
+          id: s.id,
+        })));
+
+        if (portfolioRes.data) setPortfolioStats(portfolioRes.data);
+        const feed = Array.isArray(feedRes.data) ? feedRes.data : [];
+        setFeedItems(feed.slice(0, 6));
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    loadSignals(false);
+  }, []);
+
+  useEffect(() => {
+    setChartLoading(true);
+    apiClient
+      .get('/stocks/RELIANCE.NS', { params: { range: '2y' } })
+      .then((r) => {
+        setChartBaseHistory(r.data.history || []);
+        setChartInterval(r.data.historyInterval || '1d');
+      })
+      .catch(() => setChartBaseHistory([]))
+      .finally(() => setChartLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (chartRange !== '1d') return;
+    setChartLoading(true);
+    apiClient
+      .get('/stocks/RELIANCE.NS', { params: { range: '1d' } })
+      .then((r) => {
+        setChart1dHistory(r.data.history || []);
+        setChartInterval(r.data.historyInterval || 'intraday');
+      })
+      .catch(() => setChart1dHistory([]))
+      .finally(() => setChartLoading(false));
+  }, [chartRange]);
+
+  useEffect(() => {
+    if (chartRange === '1d') {
+      setChartData(historyToChartData(chart1dHistory, '1d', chartInterval));
+    } else {
+      setChartData(historyToChartData(chartBaseHistory, chartRange, '1d'));
+    }
+  }, [chartRange, chartBaseHistory, chart1dHistory, chartInterval]);
+
+  useEffect(() => {
+    if (leaderboardData[period] !== undefined) return;
+    apiClient
+      .get(`/leaderboard?period=${period}`)
+      .then((r) => {
+        const rows = Array.isArray(r.data) ? r.data : [];
+        setLeaderboardData((prev) => ({ ...prev, [period]: rows }));
+      })
+      .catch(() => {
+        setLeaderboardData((prev) => ({ ...prev, [period]: [] }));
+      });
+  }, [period, leaderboardData]);
 
   useEffect(() => {
     loadNews(false);
