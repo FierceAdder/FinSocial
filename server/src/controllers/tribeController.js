@@ -5,13 +5,7 @@ const { ensureTribeChannelsIfNeeded } = require('../utils/ensureTribeChannels');
 
 const { genAiBaseUrl } = require('../utils/serviceUrls');
 const { finbotKeywordFallback } = require('../utils/finbotFallback');
-const GEN_AI_URL = genAiBaseUrl();
-
-function isGenAiUnreachable(err) {
-  if (err.response) return false;
-  const code = err.code || '';
-  return ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'ETIMEDOUT', 'ECONNABORTED'].includes(code);
-}
+const { isGenAiUnreachable, extractGenAiErrorReply } = require('../utils/genAiErrors');
 
 exports.getChannels = async (req, res) => {
   try {
@@ -146,10 +140,32 @@ exports.getPolls = async (req, res) => {
 
 exports.finbotReply = async (req, res) => {
   const { message, history } = req.body;
+  const trimmed = typeof message === 'string' ? message.trim() : '';
+  if (!trimmed) {
+    return res.status(400).json({ error: 'Message is required', reply: 'Please enter a message to send to FinBot.' });
+  }
+
+  const genAiUrl = genAiBaseUrl();
+  const chatUrl = `${genAiUrl}/chat`;
 
   try {
-    const response = await axios.post(`${GEN_AI_URL}/chat`, { message, history }, { timeout: 30000 });
-    return res.json(response.data);
+    const response = await axios.post(
+      chatUrl,
+      { message: trimmed, history: Array.isArray(history) ? history : [] },
+      { timeout: 45000 },
+    );
+    const data = response.data;
+    if (data && typeof data.reply === 'string' && data.reply.trim()) {
+      return res.json({
+        reply: data.reply,
+        source: data.source || 'gemini',
+      });
+    }
+    logger.warn('finbotReply unexpected upstream payload', { keys: data ? Object.keys(data) : null });
+    return res.json({
+      reply: finbotKeywordFallback(trimmed),
+      source: 'fallback',
+    });
   } catch (error) {
     const data = error.response?.data;
     logger.error('finbotReply error', {
@@ -157,32 +173,24 @@ exports.finbotReply = async (req, res) => {
       code: error.code,
       status: error.response?.status,
       upstream: typeof data === 'string' ? data.slice(0, 300) : data,
-      genAiUrl: `${GEN_AI_URL}/chat`,
+      genAiUrl: chatUrl,
       genAiConfigured: Boolean(process.env.GEN_AI_SERVICE_URL),
     });
 
     if (isGenAiUnreachable(error)) {
-      if (!process.env.GEN_AI_SERVICE_URL) {
-        return res.status(503).json({
-          reply:
-            'FinBot is not linked to the AI service. On Render, set GEN_AI_SERVICE_URL on core-api to your gen-ai URL (e.g. https://your-gen-ai.onrender.com), then redeploy.',
-          source: 'error',
-        });
-      }
+      const offlineHint = !process.env.GEN_AI_SERVICE_URL
+        ? ' On Render, set GEN_AI_SERVICE_URL on core-api to your public gen-ai URL. Locally, run gen-ai on port 5002 or set GEN_AI_SERVICE_URL.'
+        : '';
       return res.json({
-        reply: finbotKeywordFallback(message),
+        reply: finbotKeywordFallback(trimmed) + offlineHint,
         source: 'fallback',
       });
     }
 
-    const d = data && typeof data === 'object' ? data.detail : null;
-    const reply =
-      typeof d === 'string'
-        ? d
-        : data?.reply ||
-          'FinBot AI error. Check gen-ai /health (llm_ready, gemini_key_configured) and GEMINI_API_KEY on the gen-ai service.';
-    const st = typeof error.response?.status === 'number' ? error.response.status : 503;
-    const outStatus = st >= 400 && st < 499 ? st : 503;
-    return res.status(outStatus).json({ reply, source: 'error' });
+    const reply = extractGenAiErrorReply(
+      error,
+      'FinBot AI error. Check gen-ai /health (llm_ready, gemini_key_configured) and GEMINI_API_KEY on the gen-ai service.',
+    );
+    return res.json({ reply, source: 'error' });
   }
 };

@@ -3,6 +3,7 @@ import { Sparkles, X } from 'lucide-react';
 import apiClient from '../api/client';
 import useStore from '../store';
 import FinBotMessage from './FinBotMessage';
+import { parseFinbotPayload, finbotConnectError } from '../utils/finbotApi';
 
 const FINBOT_SIZE_KEY = 'finsocial_finbot_size';
 const DEFAULT_W = 340;
@@ -84,17 +85,32 @@ const FinBot = () => {
           role: m.role === 'bot' ? 'assistant' : 'user',
           content: m.content,
         }));
-      const res = await apiClient.post('/tribe/finbot', { message: trimmed, history });
-      setAiSource(res.data.source || null);
-      setMessages((prev) => [...prev, { role: 'bot', content: res.data.reply }]);
+
+      let res;
+      try {
+        res = await apiClient.post('/tribe/finbot', { message: trimmed, history });
+      } catch (firstErr) {
+        if (!firstErr.response && firstErr.code !== 'ECONNABORTED') {
+          await new Promise((r) => setTimeout(r, 1200));
+          res = await apiClient.post('/tribe/finbot', { message: trimmed, history });
+        } else {
+          throw firstErr;
+        }
+      }
+
+      const parsed = parseFinbotPayload(res.data);
+      if (parsed) {
+        setAiSource(parsed.source || null);
+        setMessages((prev) => [...prev, { role: 'bot', content: parsed.reply }]);
+      } else {
+        const fallback = finbotConnectError(null);
+        setAiSource(fallback.source);
+        setMessages((prev) => [...prev, { role: 'bot', content: fallback.reply }]);
+      }
     } catch (err) {
-      const body = err.response?.data;
-      const msg =
-        body?.reply ||
-        body?.error ||
-        'Sorry, FinBot could not connect. Check that gen-ai is deployed and GEN_AI_SERVICE_URL is set on the API.';
-      setAiSource(body?.source || 'error');
-      setMessages((prev) => [...prev, { role: 'bot', content: msg }]);
+      const parsed = finbotConnectError(err);
+      setAiSource(parsed.source);
+      setMessages((prev) => [...prev, { role: 'bot', content: parsed.reply }]);
     } finally {
       setLoading(false);
       inFlightRef.current = false;
