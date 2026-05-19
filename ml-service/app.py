@@ -8,6 +8,14 @@ import pandas as pd
 from flask import Flask, request, jsonify
 from sqlalchemy import create_engine, text
 
+from ml_features import (
+    FEATURE_COLUMNS,
+    add_ml_features,
+    display_technicals,
+    latest_feature_row,
+    normalize_ohlcv,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -16,14 +24,25 @@ app = Flask(__name__)
 # ── Model loading ──────────────────────────────────────────────────────────────
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "xgboost_stock_model.pkl")
 model = None
+model_bundle = None
 if os.path.exists(MODEL_PATH):
     try:
-        model = joblib.load(MODEL_PATH)
-        logger.info("XGBoost model loaded from %s", MODEL_PATH)
+        loaded = joblib.load(MODEL_PATH)
+        if isinstance(loaded, dict) and "model" in loaded:
+            model_bundle = loaded
+            model = loaded["model"]
+            logger.info(
+                "XGBoost bundle v%s loaded (%d features)",
+                loaded.get("version", "?"),
+                len(loaded.get("feature_columns", FEATURE_COLUMNS)),
+            )
+        else:
+            model = loaded
+            logger.warning("Legacy model pickle — retrain with train_model.py for v2 features")
     except Exception as e:
         logger.warning("Could not load XGBoost model: %s", e)
 else:
-    logger.warning("Model file not found at %s — using mock predictions", MODEL_PATH)
+    logger.warning("Model file not found at %s — using heuristic predictions", MODEL_PATH)
 
 # ── FinBERT loading (lazy) ─────────────────────────────────────────────────────
 finbert_pipeline = None
@@ -127,29 +146,6 @@ def get_stock_history(ticker: str, days: int = 90) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df["SMA_20"] = df["Close"].rolling(20).mean()
-    df["SMA_50"] = df["Close"].rolling(50).mean()
-
-    delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0.0).rolling(14).mean()
-    loss = (-delta.where(delta < 0, 0.0)).rolling(14).mean()
-    rs = gain / loss.replace(0, np.nan)
-    df["RSI"] = 100 - (100 / (1 + rs))
-
-    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
-    df["MACD"] = ema12 - ema26
-    df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
-
-    df["BB_Mid"] = df["Close"].rolling(20).mean()
-    df["BB_Upper"] = df["BB_Mid"] + 2 * df["Close"].rolling(20).std()
-    df["BB_Lower"] = df["BB_Mid"] - 2 * df["Close"].rolling(20).std()
-
-    return df.dropna()
-
-
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
@@ -158,7 +154,16 @@ def health():
         "status": "ok",
         "service": "ml-service",
         "model_loaded": model is not None,
+        "model_version": model_bundle.get("version") if model_bundle else (1 if model else None),
+        "feature_columns": model_bundle.get("feature_columns", FEATURE_COLUMNS) if model_bundle else FEATURE_COLUMNS,
+        "model_path": MODEL_PATH,
+        "model_file_exists": os.path.exists(MODEL_PATH),
+        "database_connected": db_engine is not None,
         "finbert_loaded": finbert_pipeline is not None or not _finbert_load_attempted,
+        "hint": (
+            "POST /predict and check model_used:true for live XGBoost signals. "
+            "If model_loaded is false, run train_model.py (needs StockHistory in DB) and redeploy ml-service."
+        ),
     })
 
 
@@ -171,41 +176,29 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
     if df.empty or len(df) < 60:
         raise ValueError(f"Insufficient history for {ticker}")
 
-    df = calculate_technical_indicators(df)
-    latest = df.iloc[-1]
-
-    rsi = float(latest["RSI"])
-    macd = float(latest["MACD"])
-    macd_signal = float(latest["MACD_Signal"])
-    bb_upper = float(latest["BB_Upper"])
-    bb_lower = float(latest["BB_Lower"])
-    close = float(latest["Close"])
-    sma20 = float(latest["SMA_20"])
-    sma50 = float(latest.get("SMA_50", sma20))
+    feat_row = latest_feature_row(df)
+    tech = display_technicals(df)
+    enriched = add_ml_features(normalize_ohlcv(df))
+    latest = enriched.iloc[-1]
+    rsi = float(latest["rsi"])
+    macd = float(latest["macd"])
+    macd_signal = float(latest["macd_signal"])
 
     buy_prob = None
     model_used = False
 
-    if model is not None:
-        features = pd.DataFrame([{
-            "open": float(latest["Open"]),
-            "high": float(latest["High"]),
-            "low": float(latest["Low"]),
-            "close": close,
-            "volume": float(latest["Volume"]),
-            "SMA_20": sma20,
-            "SMA_50": sma50,
-            "RSI": rsi,
-            "MACD": macd,
-            "MACD_Signal": macd_signal,
-            "BB_Upper": bb_upper,
-            "BB_Lower": bb_lower,
-        }])
+    if model is not None and feat_row is not None:
+        cols = model_bundle.get("feature_columns", FEATURE_COLUMNS) if model_bundle else FEATURE_COLUMNS
+        features = pd.DataFrame([feat_row[cols].astype(float)])
         buy_prob = float(model.predict_proba(features)[0][1])
         confidence = int(max(50, min(95, buy_prob * 100)))
         verdict = "BUY" if buy_prob > 0.55 else ("SELL" if buy_prob < 0.45 else "HOLD")
         model_used = True
     else:
+        if model is not None and feat_row is None:
+            logger.warning("Model loaded but features incomplete for %s — using heuristics", ticker)
+        close = float(latest["close"])
+        sma50 = float(latest["sma_50"])
         score = 0
         if rsi < 40:
             score += 1
@@ -223,7 +216,10 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
 
     reasoning_parts = []
     if model_used:
-        reasoning_parts.append(f"XGBoost buy probability {buy_prob * 100:.1f}%")
+        horizon = model_bundle.get("label_horizon_days", 5) if model_bundle else 5
+        reasoning_parts.append(
+            f"XGBoost {horizon}d-ahead buy probability {buy_prob * 100:.1f}%"
+        )
     if rsi < 30:
         reasoning_parts.append(f"RSI {rsi:.1f} oversold")
     elif rsi > 70:
@@ -242,11 +238,7 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
         "buy_prob": round(buy_prob, 4),
         "model_used": model_used,
         "reasoning": ". ".join(reasoning_parts) + ".",
-        "technicals": {
-            "rsi": round(rsi, 2),
-            "macd": round(macd, 4),
-            "close": round(close, 2),
-        },
+        "technicals": tech,
     }
 
 
