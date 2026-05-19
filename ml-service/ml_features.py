@@ -48,6 +48,33 @@ def normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def prepare_ohlcv_history(df: pd.DataFrame) -> pd.DataFrame:
+    """Sort, dedupe by calendar day, drop invalid OHLC rows (common after partial imports)."""
+    out = normalize_ohlcv(df)
+    if out.empty:
+        return out
+
+    if "date" not in out.columns:
+        out = out.reset_index()
+        if out.columns[0] != "date":
+            out = out.rename(columns={out.columns[0]: "date"})
+
+    out["date"] = pd.to_datetime(out["date"], utc=True).dt.tz_convert(None).dt.normalize()
+    out = out.sort_values("date")
+
+    for col in ("open", "high", "low", "close", "volume"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    out = out.dropna(subset=["close"])
+    out = out[out["close"] > 0]
+    if {"high", "low"}.issubset(out.columns):
+        out = out[out["high"] >= out["low"]]
+
+    out = out.drop_duplicates(subset=["date"], keep="last")
+    return out.set_index("date").sort_index()
+
+
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = normalize_ohlcv(df)
     df = df.copy()
@@ -79,19 +106,21 @@ def add_ml_features(df: pd.DataFrame) -> pd.DataFrame:
     """Scale-free features for XGBoost."""
     df = calculate_technical_indicators(df)
     close = df["close"].astype(float)
-    vol = df["volume"].astype(float).replace(0, np.nan)
+    vol = df["volume"].astype(float).clip(lower=0)
+    vol_ma = vol.rolling(20).mean()
 
     df["ret_1d"] = close.pct_change(1)
     df["ret_5d"] = close.pct_change(5)
     df["ret_20d"] = close.pct_change(20)
-    df["vol_ratio"] = vol / vol.rolling(20).mean()
+    df["vol_ratio"] = np.where(vol_ma > 0, vol / vol_ma, 1.0)
 
     df["macd_hist"] = df["macd"] - df["macd_signal"]
-    df["dist_sma20"] = (close - df["sma_20"]) / df["sma_20"]
-    df["dist_sma50"] = (close - df["sma_50"]) / df["sma_50"]
+    df["dist_sma20"] = (close - df["sma_20"]) / df["sma_20"].replace(0, np.nan)
+    df["dist_sma50"] = (close - df["sma_50"]) / df["sma_50"].replace(0, np.nan)
 
     bb_width = (df["bb_upper"] - df["bb_lower"]).replace(0, np.nan)
     df["bb_position"] = (close - df["bb_lower"]) / bb_width
+    df["bb_position"] = df["bb_position"].fillna(0.5)
 
     df["range_pct"] = (df["high"] - df["low"]) / close
 
@@ -128,18 +157,39 @@ def build_training_frame(raw_df: pd.DataFrame, horizon: int = LABEL_HORIZON_DAYS
 
 def latest_feature_row(df: pd.DataFrame) -> pd.Series | None:
     """Last row's model features from OHLCV history (for /predict)."""
-    enriched = add_ml_features(normalize_ohlcv(df))
+    prepared = prepare_ohlcv_history(df)
+    if prepared.empty or len(prepared) < 60:
+        return None
+
+    enriched = add_ml_features(prepared)
     if enriched.empty:
         return None
+
+    # Prefer latest bar; walk back if partial/duplicate import left NaNs on last day
+    for i in range(1, min(8, len(enriched)) + 1):
+        row = enriched.iloc[-i]
+        subset = row[FEATURE_COLUMNS]
+        if not subset.isna().any():
+            return subset
+
+    return None
+
+
+def missing_feature_columns(df: pd.DataFrame) -> list[str]:
+    """Which FEATURE_COLUMNS are NaN on the latest bar (for logging)."""
+    prepared = prepare_ohlcv_history(df)
+    if prepared.empty:
+        return list(FEATURE_COLUMNS)
+    enriched = add_ml_features(prepared)
+    if enriched.empty:
+        return list(FEATURE_COLUMNS)
     row = enriched.iloc[-1]
-    if row[FEATURE_COLUMNS].isna().any():
-        return None
-    return row[FEATURE_COLUMNS]
+    return [c for c in FEATURE_COLUMNS if pd.isna(row[c])]
 
 
 def display_technicals(df: pd.DataFrame) -> dict:
     """Human-readable RSI/MACD/close for API responses."""
-    enriched = add_ml_features(normalize_ohlcv(df))
+    enriched = add_ml_features(prepare_ohlcv_history(df))
     if enriched.empty:
         return {}
     latest = enriched.iloc[-1]

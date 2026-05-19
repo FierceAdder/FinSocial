@@ -7,37 +7,56 @@
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const YahooFinance = require('yahoo-finance2').default;
-const yf = new YahooFinance();
+const yf = new YahooFinance({ suppressNotices: ['ripHistorical'] });
 
 const prisma = new PrismaClient();
 
-async function fetchOhlcv(ticker, period1, period2) {
+/** DB ticker → Yahoo symbol when they differ */
+const YAHOO_TICKER_ALIASES = {
+  'KOTAK.NS': 'KOTAKBANK.NS',
+};
+
+function yahooSymbol(dbTicker) {
+  return YAHOO_TICKER_ALIASES[dbTicker] || dbTicker;
+}
+
+function normalizeQuote(q) {
+  const close = q.close ?? q.adjclose;
+  if (!q.date || !Number.isFinite(close)) return null;
+
+  const open = Number.isFinite(q.open) ? q.open : close;
+  const high = Number.isFinite(q.high) ? q.high : Math.max(open, close);
+  const low = Number.isFinite(q.low) ? q.low : Math.min(open, close);
+  const volume = Number.isFinite(q.volume) ? q.volume : 0;
+
+  return {
+    date: q.date,
+    open,
+    high,
+    low,
+    close,
+    volume,
+  };
+}
+
+async function fetchOhlcv(dbTicker, period1, period2) {
+  const symbol = yahooSymbol(dbTicker);
+
   try {
-    const rows = await yf.historical(ticker, {
-      period1,
-      period2,
-      interval: '1d',
-    });
-    if (rows?.length) return rows;
+    const chart = await yf.chart(symbol, { period1, period2, interval: '1d' });
+    const quotes = chart?.quotes || [];
+    const rows = quotes.map(normalizeQuote).filter(Boolean);
+    if (rows.length) return rows;
   } catch (e) {
-    console.warn(`    historical() failed for ${ticker}: ${e.message}`);
+    console.warn(`    chart() failed for ${symbol}: ${e.message}`);
   }
 
   try {
-    const chart = await yf.chart(ticker, { period1, period2, interval: '1d' });
-    const quotes = chart?.quotes || [];
-    if (quotes.length) {
-      return quotes.map((q) => ({
-        date: q.date,
-        open: q.open,
-        high: q.high,
-        low: q.low,
-        close: q.close,
-        volume: q.volume,
-      }));
-    }
+    const rows = await yf.historical(symbol, { period1, period2, interval: '1d' });
+    const normalized = (rows || []).map(normalizeQuote).filter(Boolean);
+    if (normalized.length) return normalized;
   } catch (e) {
-    console.warn(`    chart() failed for ${ticker}: ${e.message}`);
+    console.warn(`    historical() failed for ${symbol}: ${e.message}`);
   }
 
   return [];
@@ -51,44 +70,47 @@ async function importHistory() {
   period1.setFullYear(period1.getFullYear() - 2);
   const period2 = new Date();
 
+  let ok = 0;
+  let skipped = 0;
+
   for (const stock of stocks) {
     try {
-      console.log(`  Fetching ${stock.ticker}...`);
+      const yahoo = yahooSymbol(stock.ticker);
+      console.log(`  Fetching ${stock.ticker}${yahoo !== stock.ticker ? ` (Yahoo: ${yahoo})` : ''}...`);
       const result = await fetchOhlcv(stock.ticker, period1, period2);
 
       if (!result || result.length === 0) {
-        console.log(`  No data for ${stock.ticker}, skipping.`);
+        console.log(`  No data for ${stock.ticker}, skipping (existing DB rows kept).`);
+        skipped += 1;
         continue;
       }
 
-      const records = result
-        .filter((row) => row.date && Number.isFinite(row.close))
-        .map((row) => ({
-          stockId: stock.id,
-          date: new Date(row.date),
-          open: row.open || 0,
-          high: row.high || 0,
-          low: row.low || 0,
-          close: row.close || 0,
-          volume: row.volume || 0,
-        }));
+      const records = result.map((row) => ({
+        stockId: stock.id,
+        date: new Date(row.date),
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: row.volume,
+      }));
 
-      // Replace any synthetic/seed rows so Yahoo OHLCV is authoritative
       const deleted = await prisma.stockHistory.deleteMany({ where: { stockId: stock.id } });
       const inserted = await prisma.stockHistory.createMany({ data: records });
       console.log(
         `  ✓ ${inserted.count} Yahoo rows for ${stock.displayTicker}` +
           (deleted.count ? ` (replaced ${deleted.count} old rows)` : ''),
       );
+      ok += 1;
 
-      // Respect rate limits
       await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
       console.error(`  Error for ${stock.ticker}: ${err.message}`);
+      skipped += 1;
     }
   }
 
-  console.log('\nDone importing history.');
+  console.log(`\nDone importing history. Updated: ${ok}, skipped: ${skipped}.`);
 }
 
 importHistory()

@@ -13,7 +13,9 @@ from ml_features import (
     add_ml_features,
     display_technicals,
     latest_feature_row,
+    missing_feature_columns,
     normalize_ohlcv,
+    prepare_ohlcv_history,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -131,7 +133,7 @@ def get_stock_history(ticker: str, days: int = 90) -> pd.DataFrame:
                 df = pd.DataFrame(rows, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
                 df["Date"] = pd.to_datetime(df["Date"])
                 df.set_index("Date", inplace=True)
-                return df
+                return prepare_ohlcv_history(df)
         except Exception as e:
             logger.warning("DB history fetch failed for %s: %s", ticker, e)
 
@@ -181,7 +183,7 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
 
     feat_row = latest_feature_row(df)
     tech = display_technicals(df)
-    enriched = add_ml_features(normalize_ohlcv(df))
+    enriched = add_ml_features(prepare_ohlcv_history(df))
     latest = enriched.iloc[-1]
     rsi = float(latest["rsi"])
     macd = float(latest["macd"])
@@ -199,7 +201,12 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
         model_used = True
     else:
         if model is not None and feat_row is None:
-            logger.warning("Model loaded but features incomplete for %s — using heuristics", ticker)
+            missing = missing_feature_columns(df)
+            logger.warning(
+                "Model loaded but features incomplete for %s — using heuristics (missing on latest bar: %s)",
+                ticker,
+                ", ".join(missing) if missing else "unknown",
+            )
         close = float(latest["close"])
         sma50 = float(latest["sma_50"])
         score = 0
