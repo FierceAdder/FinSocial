@@ -1,5 +1,28 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 
+/** Bucket OHLC rows so each candle has at least minSlotPx horizontal space. */
+function resampleCandlesForWidth(candles, innerW, minSlotPx = 4) {
+  const maxBars = Math.max(Math.floor(innerW / minSlotPx), 48);
+  if (candles.length <= maxBars) return candles;
+  const out = [];
+  for (let g = 0; g < maxBars; g++) {
+    const start = Math.floor((g * candles.length) / maxBars);
+    const end = Math.floor(((g + 1) * candles.length) / maxBars);
+    const slice = candles.slice(start, Math.max(end, start + 1));
+    const first = slice[0];
+    const last = slice[slice.length - 1];
+    out.push({
+      ...last,
+      open: first.open,
+      close: last.close,
+      high: Math.max(...slice.map((c) => c.high)),
+      low: Math.min(...slice.map((c) => c.low)),
+      date: last.date,
+    });
+  }
+  return out;
+}
+
 /** OHLC candles: date (label string), open, high, low, close */
 export default function CandlestickChart({
   data = [],
@@ -9,6 +32,7 @@ export default function CandlestickChart({
   markLabel = 'Trade',
   maxXLabels = 8,
   chartKey = '',
+  compact = false,
 }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(640);
@@ -35,9 +59,17 @@ export default function CandlestickChart({
 
   const layout = useMemo(() => {
     if (!candles.length) return null;
+    const pl = compact ? 4 : 12;
+    const pr = compact ? 4 : 8;
+    const pt = compact ? 6 : 12;
+    const pb = compact ? 20 : 36;
+    const innerW = Math.max(width - pl - pr, 80);
+    const innerH = height - pt - pb;
+    const minSlotPx = compact ? 5 : 3.5;
+    const displayCandles = resampleCandlesForWidth(candles, innerW, minSlotPx);
     let min = Infinity;
     let max = -Infinity;
-    candles.forEach((c) => {
+    displayCandles.forEach((c) => {
       min = Math.min(min, c.low);
       max = Math.max(max, c.high);
     });
@@ -45,20 +77,19 @@ export default function CandlestickChart({
     const pad = span > 0 ? span * 0.06 : Math.abs(min) * 0.02 || 1;
     const yMin = min - pad;
     const yMax = max + pad;
-    const pl = 42;
-    const pr = 8;
-    const pt = 12;
-    const pb = 36;
-    const innerW = Math.max(width - pl - pr, 80);
-    const innerH = height - pt - pb;
-    const n = candles.length;
+    const n = displayCandles.length;
     const slot = innerW / n;
+    const bw = Math.min(Math.max(slot * 0.68, 2), Math.min(14, slot * 0.82));
+    const flushCandles = compact && n > 1;
+    const candleStep = flushCandles ? (innerW - bw) / (n - 1) : slot;
+    const candleCenterX = (i) =>
+      (flushCandles ? pl + bw / 2 + i * candleStep : pl + (i + 0.5) * slot);
     const toY = (v) => pt + innerH - ((Number(v) - yMin) / (yMax - yMin || 1)) * innerH;
     const markIx =
-      markIndex >= 0 && markIndex < n
-        ? markIndex
+      markIndex >= 0 && markIndex < candles.length
+        ? Math.min(Math.floor((markIndex / candles.length) * n), n - 1)
         : markDate
-          ? candles.findIndex((c) => c.date === markDate)
+          ? displayCandles.findIndex((c) => c.date === markDate)
           : -1;
 
     const labelStep = Math.max(1, Math.ceil(n / Math.max(4, Math.min(maxXLabels, Math.floor(innerW / 52)))));
@@ -68,15 +99,39 @@ export default function CandlestickChart({
       if (xLabelIndices[xLabelIndices.length - 1] !== n - 1) xLabelIndices.push(n - 1);
     }
 
-    return { yMin, yMax, pl, pr, pt, pb, innerW, innerH, slot, toY, n, markIx, xLabelIndices };
-  }, [candles, width, height, markDate, markIndex, maxXLabels]);
+    return {
+      yMin,
+      yMax,
+      pl,
+      pr,
+      pt,
+      pb,
+      innerW,
+      innerH,
+      slot,
+      bw,
+      flushCandles,
+      candleStep,
+      candleCenterX,
+      toY,
+      n,
+      markIx,
+      xLabelIndices,
+      displayCandles,
+    };
+  }, [candles, width, height, markDate, markIndex, maxXLabels, compact]);
 
   const onMove = (e) => {
     if (!layout) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const ix = Math.floor((x - layout.pl) / layout.slot);
-    if (ix >= 0 && ix < candles.length) setHoverIdx(ix);
+    let ix;
+    if (layout.flushCandles && layout.n > 1) {
+      ix = Math.round((x - layout.pl - layout.bw / 2) / layout.candleStep);
+    } else {
+      ix = Math.floor((x - layout.pl) / layout.slot);
+    }
+    if (ix >= 0 && ix < layout.n) setHoverIdx(ix);
     else setHoverIdx(null);
   };
 
@@ -99,8 +154,7 @@ export default function CandlestickChart({
     );
   }
 
-  const { pl, pt, innerH, innerW, slot, toY, markIx, xLabelIndices } = layout;
-  const bw = Math.min(Math.max(slot * 0.72, 2), 16);
+  const { pl, pt, innerH, innerW, slot, bw, candleCenterX, toY, markIx, xLabelIndices, displayCandles } = layout;
   const axisColor = 'var(--text3, #888)';
   const fontPx = Math.min(10, Math.max(8, slot * 0.35));
 
@@ -117,14 +171,14 @@ export default function CandlestickChart({
         })}
 
         {xLabelIndices.map((i) => {
-          const x = pl + i * slot + slot / 2;
-          const label = candles[i]?.date || '';
+          const x = candleCenterX(i);
+          const label = displayCandles[i]?.date || '';
           return (
             <text
               key={`xlab-${i}`}
               x={Math.min(pl + innerW - 2, Math.max(pl + 2, x))}
               y={height - 6}
-              textAnchor={i === 0 ? 'start' : i === candles.length - 1 ? 'end' : 'middle'}
+              textAnchor={i === 0 ? 'start' : i === displayCandles.length - 1 ? 'end' : 'middle'}
               fill={axisColor}
               fontSize={fontPx}
               style={{ pointerEvents: 'none' }}
@@ -134,8 +188,8 @@ export default function CandlestickChart({
           );
         })}
 
-        {candles.map((c, i) => {
-          const cx = pl + i * slot + slot / 2;
+        {displayCandles.map((c, i) => {
+          const cx = candleCenterX(i);
           const yHigh = toY(c.high);
           const yLow = toY(c.low);
           const yOpen = toY(c.open);
@@ -165,8 +219,8 @@ export default function CandlestickChart({
         {markIx >= 0 && (
           <g>
             <line
-              x1={pl + markIx * slot + slot / 2}
-              x2={pl + markIx * slot + slot / 2}
+              x1={candleCenterX(markIx)}
+              x2={candleCenterX(markIx)}
               y1={pt}
               y2={pt + innerH}
               stroke="#dc2626"
@@ -174,17 +228,17 @@ export default function CandlestickChart({
               strokeDasharray="5 5"
               opacity={0.9}
             />
-            <text x={pl + markIx * slot + slot / 2 + 4} y={pt + 14} fill="#dc2626" fontSize={10} fontWeight={600}>
+            <text x={candleCenterX(markIx) + 4} y={pt + 14} fill="#dc2626" fontSize={10} fontWeight={600}>
               {markLabel}
             </text>
           </g>
         )}
       </svg>
-      {tipIdx != null && candles[tipIdx] && (
+      {tipIdx != null && displayCandles[tipIdx] && (
         <div
           style={{
             position: 'absolute',
-            left: Math.min(Math.max(pl + tipIdx * slot + slot / 2 - 70, 4), width - 148),
+            left: Math.min(Math.max(candleCenterX(tipIdx) - 70, 4), width - 148),
             top: 6,
             background: 'var(--card, #fff)',
             border: '1px solid var(--border)',
@@ -196,9 +250,9 @@ export default function CandlestickChart({
             zIndex: 2,
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>{candles[tipIdx].date}</div>
-          <div className="mono">O {candles[tipIdx].open?.toFixed(2)} H {candles[tipIdx].high?.toFixed(2)}</div>
-          <div className="mono">L {candles[tipIdx].low?.toFixed(2)} C {candles[tipIdx].close?.toFixed(2)}</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{displayCandles[tipIdx].date}</div>
+          <div className="mono">O {displayCandles[tipIdx].open?.toFixed(2)} H {displayCandles[tipIdx].high?.toFixed(2)}</div>
+          <div className="mono">L {displayCandles[tipIdx].low?.toFixed(2)} C {displayCandles[tipIdx].close?.toFixed(2)}</div>
         </div>
       )}
     </div>

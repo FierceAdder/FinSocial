@@ -151,9 +151,7 @@ exports.refreshSignals = async (req, res) => {
     if (result.updated === 0) {
       message = 'Could not generate signals. Check that the ML service is running.';
     } else if (result.failed > 0) {
-      message = `Generated ${result.updated} signal(s); ${result.failed} stock(s) failed.`;
-    } else {
-      message = `Generated ${result.updated} new signal(s).`;
+      message = `${result.failed} stock(s) could not be updated. ${result.updated} succeeded.`;
     }
 
     res.json({ ...result, message, signals, stats: summarizeSignalPool(pool) });

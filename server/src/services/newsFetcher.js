@@ -156,9 +156,7 @@ async function fetchAndStoreNews() {
   logger.info('[News] Fetch complete', { fetched: articles.length, saved, skipped });
   const result = { fetched: articles.length, saved, skipped };
   if (saved === 0 && articles.length > 0) {
-    result.message = 'No new headlines — stories from NewsAPI are already in your feed.';
-  } else if (saved > 0) {
-    result.message = `Added ${saved} new headline${saved === 1 ? '' : 's'}.`;
+    result.message = 'No new headlines — everything from NewsAPI is already in your feed.';
   }
   return result;
 }

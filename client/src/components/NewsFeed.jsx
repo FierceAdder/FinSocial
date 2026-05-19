@@ -40,7 +40,7 @@ export default function NewsFeed({ articles = [], loading = false, error = null,
 
       {error && <div className="news-feed-error">{error}</div>}
       {!error && refreshMessage && (
-        <div style={{ padding: '8px 12px', marginBottom: '8px', fontSize: '0.82rem', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: '8px' }}>
+        <div className="news-feed-notice" role="status">
           {refreshMessage}
         </div>
       )}

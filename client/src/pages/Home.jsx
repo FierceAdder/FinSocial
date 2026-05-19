@@ -21,6 +21,7 @@ const Home = () => {
   const user = useStore((state) => state.user);
   const [period, setPeriod] = useState('weekly');
   const [trendingTickers, setTrendingTickers] = useState([]);
+  const [topStock, setTopStock] = useState(null);
   const [portfolioStats, setPortfolioStats] = useState(null);
   const [feedItems, setFeedItems] = useState([]);
   const [leaderboardData, setLeaderboardData] = useState({});
@@ -67,8 +68,10 @@ const Home = () => {
       if (refresh) {
         if (r.data.error && r.data.updated === 0) {
           setSignalsError(r.data.error);
-        } else if (r.data.message) {
+        } else if (r.data.failed > 0 && r.data.message) {
           setSignalsRefreshMsg(r.data.message);
+        } else {
+          setSignalsRefreshMsg(null);
         }
       }
     } catch (err) {
@@ -95,8 +98,11 @@ const Home = () => {
       if (refresh) {
         if (r.data.error && r.data.saved === 0) {
           setNewsError(r.data.error);
-        } else if (r.data.message) {
+          setNewsRefreshMsg(null);
+        } else if (r.data.saved === 0 && r.data.message) {
           setNewsRefreshMsg(r.data.message);
+        } else {
+          setNewsRefreshMsg(null);
         }
       }
     } catch (err) {
@@ -132,14 +138,17 @@ const Home = () => {
         }
 
         const list = rawList.filter((s) => !DASHBOARD_EXCLUDED_TICKERS.has(s.ticker));
-        setTrendingTickers(list.slice(0, 8).map((s) => ({
+        const toTickerRow = (s) => ({
           tickerDisplay: s.displayTicker || s.ticker,
           tickerFull: s.ticker,
           price: s.price,
+          changePct: s.changePct ?? 0,
           chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
           up: s.changePct >= 0,
           id: s.id,
-        })));
+        });
+        setTopStock(list.length > 0 ? toTickerRow(list[0]) : null);
+        setTrendingTickers(list.slice(0, 8).map(toTickerRow));
 
         if (portfolioRes.data) setPortfolioStats(portfolioRes.data);
         const feed = Array.isArray(feedRes.data) ? feedRes.data : [];
@@ -223,6 +232,18 @@ const Home = () => {
     return () => clearTimeout(t);
   }, []);
 
+  useEffect(() => {
+    if (!newsRefreshMsg) return undefined;
+    const t = setTimeout(() => setNewsRefreshMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [newsRefreshMsg]);
+
+  useEffect(() => {
+    if (!signalsRefreshMsg) return undefined;
+    const t = setTimeout(() => setSignalsRefreshMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [signalsRefreshMsg]);
+
   // Real-time feed updates via socket
   useSocket({
     'feed:new': (event) => {
@@ -244,13 +265,21 @@ const Home = () => {
 
   const currentLb = leaderboardData[period] || [];
 
-  const featuredStock =
-    trendingTickers.find((t) => t.tickerFull === FEATURED_STOCK_TICKER) ||
-    trendingTickers[0];
-
   const chartLabel =
     chartStockOptions.find((o) => o.ticker === chartTicker)?.label ||
     chartTicker.replace(/\.NS$/i, '');
+
+
+  const signalVerdictClass = (verdict) => {
+    if (verdict === 'BUY') return 'dashboard-signal-chip--buy';
+    if (verdict === 'SELL') return 'dashboard-signal-chip--sell';
+    return 'dashboard-signal-chip--hold';
+  };
+
+  const openStockPage = (tickerFull) => {
+    if (!tickerFull) return;
+    navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(tickerFull)}`);
+  };
 
   return (
     <div className="page fade-in" id="homePage">
@@ -269,8 +298,15 @@ const Home = () => {
           <div className="stat-label">Total P&L</div>
         </div>
         <div className="card stat-card">
-          <div className="stat-val mono">{featuredStock?.price ? `₹${featuredStock.price.toFixed(0)}` : '—'}</div>
-          <div className="stat-label">{featuredStock?.tickerDisplay || 'RELIANCE'}</div>
+          <div className="stat-val mono">{topStock?.price ? `₹${topStock.price.toFixed(0)}` : '—'}</div>
+          <div className="stat-label">Top Stock</div>
+          {topStock && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: '4px' }}>
+              <span className="mono" style={{ fontWeight: 600 }}>{topStock.tickerDisplay}</span>
+              {' '}
+              <span className={topStock.up ? 'positive' : 'negative'}>{topStock.chg}</span>
+            </div>
+          )}
         </div>
         <div className="card stat-card">
           <div className="stat-val">
@@ -287,35 +323,21 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Trending Tickers */}
-      <div className="card trending-card">
-        <div className="card-title" style={{ marginBottom: '8px' }}>🔥 Trending on FinSocial</div>
-        <div className="trending-strip">
-          {trendingTickers.map((t) => (
-            <div
-              key={t.tickerFull}
-              className="trending-item"
-              onClick={() => navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(t.tickerFull)}`)}
-            >
-              <span className="trending-ticker mono">{t.tickerDisplay}</span>
-              <span className="trending-price mono">₹{t.price?.toFixed(0)}</span>
-              <span className={`mono ${t.up ? 'positive' : 'negative'}`}>{t.chg}</span>
+      <div className="dashboard-section dashboard-market-row">
+        <div className="dashboard-market-main">
+        <section className="card dashboard-chart-card" aria-labelledby="dashboard-chart-heading" style={{ marginBottom: 0 }}>
+          <div className="dashboard-section-head">
+            <div>
+              <h2 id="dashboard-chart-heading" className="dashboard-section-title">Market chart</h2>
+              <p className="dashboard-section-desc">OHLC history for any listed stock</p>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-              <div className="card-title" style={{ margin: 0 }}>{chartLabel}</div>
+            <div className="dashboard-section-head-controls">
               <select
                 className="form-input"
                 value={chartTicker}
                 onChange={(e) => handleChartTickerChange(e.target.value)}
                 aria-label="Select stock chart"
-                style={{ width: 'auto', minWidth: '120px', maxWidth: '160px', padding: '6px 10px', fontSize: '0.82rem' }}
+                style={{ width: 'auto', minWidth: '140px', padding: '6px 10px', fontSize: '0.82rem' }}
               >
                 {chartStockOptions.length === 0 ? (
                   <option value={chartTicker}>{chartLabel}</option>
@@ -325,78 +347,116 @@ const Home = () => {
                   ))
                 )}
               </select>
+              <ChartRangeSelector value={chartRange} onChange={setChartRange} />
             </div>
-            <ChartRangeSelector value={chartRange} onChange={setChartRange} />
           </div>
-          <div style={{ height: 260 }}>
+          <div className="dashboard-chart-area">
             {chartLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>
-                Loading chart...
+                Loading chart…
               </div>
             ) : chartData.length > 0 ? (
-              <CandlestickChart data={chartData} height={260} chartKey={`${chartTicker}-${chartRange}`} />
+              <CandlestickChart
+                data={chartData}
+                height={300}
+                compact
+                chartKey={`${chartTicker}-${chartRange}`}
+              />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>
                 No chart data for this range
               </div>
             )}
           </div>
+        </section>
+
+        <section className="card trending-card dashboard-market-trending" style={{ marginBottom: 0 }}>
+          <div style={{ marginBottom: '8px' }}>
+            <h2 className="dashboard-section-title" style={{ marginBottom: '4px' }}>🔥 Trending on FinSocial</h2>
+            <p className="dashboard-section-desc">Top 8 by daily % change</p>
+          </div>
+          <div className="trending-strip">
+            {trendingTickers.map((t) => (
+              <div
+                key={t.tickerFull}
+                className="trending-item"
+                onClick={() => openStockPage(t.tickerFull)}
+              >
+                <span className="trending-ticker mono">{t.tickerDisplay}</span>
+                <span className="trending-price mono">₹{t.price?.toFixed(0)}</span>
+                <span className={`mono ${t.up ? 'positive' : 'negative'}`}>{t.chg}</span>
+              </div>
+            ))}
+          </div>
+        </section>
         </div>
 
-        {/* Signal Board */}
-        <div className="ai-card" style={{ marginTop: 0 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
-            <div className="card-title" style={{ margin: 0 }}>Signal board</div>
+        <section className="card dashboard-signals-panel" aria-labelledby="dashboard-signals-heading" style={{ marginBottom: 0 }}>
+          <div className="dashboard-section-head">
+            <div>
+              <h2 id="dashboard-signals-heading" className="dashboard-section-title">ML signals</h2>
+              <p className="dashboard-section-desc">
+                {signalStats != null
+                  ? `Showing 5 of ${signalStats.total} live ML signals · updates every 5 min`
+                  : 'Live ML predictions · updates every 5 min'}
+              </p>
+            </div>
             <button
               type="button"
-              className="lb-tab"
+              className="btn btn-sm"
               onClick={() => loadSignals(true)}
               disabled={signalsLoading}
             >
-              {signalsLoading ? 'Generating…' : 'Generate signals'}
+              {signalsLoading ? '…' : 'Refresh'}
             </button>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text3)', display: 'block', marginBottom: '10px' }}>
-            Random sample of latest signals · auto-refresh every 5 minutes
-          </span>
-          {signalsError && (
-            <div className="news-feed-error" style={{ marginBottom: '8px' }}>{signalsError}</div>
-          )}
+          {signalsError && <div className="news-feed-error" style={{ marginBottom: '8px' }}>{signalsError}</div>}
           {!signalsError && signalsRefreshMsg && (
-            <div style={{ padding: '8px 12px', marginBottom: '8px', fontSize: '0.82rem', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: '8px' }}>
+            <div style={{ padding: '8px 10px', marginBottom: '10px', fontSize: '0.8rem', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: '8px' }}>
               {signalsRefreshMsg}
             </div>
           )}
-          {signals.length > 0 ? signals.map((s) => (
-            <div key={s.id || s.ticker} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span className="mono" style={{ fontWeight: 700 }}>{s.ticker || s.stock?.displayTicker}</span>
-                <span className={`badge ${s.verdict === 'BUY' ? 'badge-green' : s.verdict === 'SELL' ? 'badge-red' : 'badge-gray'}`}>
-                  {s.verdict}
-                </span>
+          {signals.length > 0 ? (
+            <div className="dashboard-signals-list">
+                {signals.map((s) => {
+                  const display = s.stock?.displayTicker || (s.ticker || '').replace(/\.NS$/i, '');
+                  const full = s.stock?.ticker || s.ticker;
+                  return (
+                    <article
+                      key={s.id || full}
+                      className={`dashboard-signal-chip ${signalVerdictClass(s.verdict)}`}
+                      onClick={() => openStockPage(full)}
+                      onKeyDown={(e) => e.key === 'Enter' && openStockPage(full)}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="dashboard-signal-chip-top">
+                        <span className="dashboard-signal-chip-ticker mono">{display}</span>
+                        <span className={`badge ${s.verdict === 'BUY' ? 'badge-green' : s.verdict === 'SELL' ? 'badge-red' : 'badge-gray'}`}>
+                          {s.verdict}
+                        </span>
+                      </div>
+                      <div className="dashboard-signal-chip-conf mono">{s.confidence}% confidence</div>
+                      <div className="conf-bar" style={{ marginBottom: '8px' }}>
+                        <div className="conf-bar-fill" style={{ width: `${s.confidence}%` }} />
+                      </div>
+                      <p className="dashboard-signal-chip-reason">{s.reasoning}</p>
+                    </article>
+                  );
+                })}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text3)', marginBottom: '4px' }}>
-                Confidence: {s.confidence}%
-              </div>
-              <div className="conf-bar">
-                <div className="conf-bar-fill" style={{ width: `${s.confidence}%` }} />
-              </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text2)', marginTop: '4px', lineHeight: 1.5 }}>
-                {s.reasoning?.slice(0, 100)}{s.reasoning?.length > 100 ? '…' : ''}
-              </p>
-            </div>
-          )) : (
+          ) : (
             <div style={{ color: 'var(--text3)', fontSize: '0.85rem' }}>
               {!signalsReady || signalsLoading
                 ? 'Loading signals…'
-                : 'No signals yet. Tap Generate signals or wait for the next auto-refresh (every 5 minutes).'}
-          </div>
+                : 'No signals yet. Tap Refresh or wait for auto-refresh.'}
+            </div>
           )}
-        </div>
+        </section>
       </div>
 
-      <div className="card" style={{ marginTop: '16px' }}>
-        <div className="card-title">📰 Market News</div>
+      <section className="dashboard-section card">
+        <h2 className="dashboard-section-title" style={{ marginBottom: '12px' }}>📰 Market News</h2>
         <NewsFeed
           articles={newsArticles}
           loading={newsLoading}
@@ -404,9 +464,9 @@ const Home = () => {
           refreshMessage={newsRefreshMsg}
           onRefresh={() => loadNews(true)}
         />
-      </div>
+      </section>
 
-      <div className="grid-2" style={{ marginTop: '16px' }}>
+      <div className="grid-2 dashboard-section">
         <div className="card">
           <div className="card-title">Community Feed</div>
           <div id="feedList">
