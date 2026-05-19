@@ -271,8 +271,8 @@ const Tribe = () => {
               <strong>Commands:</strong><br />
               @finbot — AI assistant<br />
               /poll Question/Yes/No/… or /poll Question | Yes | No
-            </div>
           </div>
+        </div>
         </aside>
 
         <div className="tribe-chat">
@@ -293,7 +293,7 @@ const Tribe = () => {
               </button>
             )}
           </div>
-
+          
           <div className="tribe-messages">
             {messages.length === 0 ? (
               <div className="tribe-empty">
@@ -367,7 +367,7 @@ const Tribe = () => {
                           {isMe && <div className="msg-time-me">{formatTime(msg.timestamp)}</div>}
                         </>
                       )}
-                    </div>
+                </div>
                   </div>
                 );
               })
@@ -377,7 +377,7 @@ const Tribe = () => {
           </div>
 
           <form className="tribe-input-bar" onSubmit={handleSend}>
-            <input
+              <input 
               className="tribe-msg-input"
               placeholder={currentChannel ? `Message #${currentChannel.name}… — @finbot or /poll` : 'Select a channel...'}
               value={input}

@@ -44,8 +44,7 @@ const Home = () => {
         ? await apiClient.post('/feed/signals/refresh', {}, { timeout: 120_000 })
         : await apiClient.get('/feed/signals');
       const list = refresh ? (r.data.signals ?? r.data) : r.data;
-      const sig = Array.isArray(list) ? list : [];
-      setSignals(sig.slice(0, 5));
+      setSignals(Array.isArray(list) ? list : []);
       if (refresh) {
         if (r.data.error && r.data.updated === 0) {
           setSignalsError(r.data.error);
@@ -102,8 +101,8 @@ const Home = () => {
         setTrendingTickers(list.slice(0, 8).map((s) => ({
           tickerDisplay: s.displayTicker || s.ticker,
           tickerFull: s.ticker,
-          price: s.price,
-          chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
+        price: s.price,
+        chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
           up: s.changePct >= 0,
           id: s.id,
         })));
@@ -182,8 +181,8 @@ const Home = () => {
         return [article, ...prev].slice(0, 12);
       });
     },
-    'signal:new': (signal) => {
-      setSignals((prev) => [signal, ...prev].slice(0, 5));
+    'signal:new': () => {
+      loadSignals(false);
     },
   });
 
@@ -195,7 +194,7 @@ const Home = () => {
   return (
     <div className="page fade-in" id="homePage">
       <h1 className="page-title">Dashboard</h1>
-
+      
       {/* Stats */}
       <div className="home-stats">
         <div className="card stat-card">
@@ -271,7 +270,7 @@ const Home = () => {
             </button>
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text3)', display: 'block', marginBottom: '10px' }}>
-            Auto-refresh every 5 minutes
+            Random sample of latest signals · auto-refresh every 5 minutes
           </span>
           {signalsError && (
             <div className="news-feed-error" style={{ marginBottom: '8px' }}>{signalsError}</div>
@@ -304,7 +303,7 @@ const Home = () => {
               {!signalsReady || signalsLoading
                 ? 'Loading signals…'
                 : 'No signals yet. Tap Generate signals or wait for the next auto-refresh (every 5 minutes).'}
-            </div>
+          </div>
           )}
         </div>
       </div>
@@ -338,7 +337,7 @@ const Home = () => {
               return (
                 <div key={f.id || idx} className={`feed-item ${f.isLive ? 'feed-item-live' : ''}`}>
                   <div className="feed-av" title={actorLabel}>{actorInitials}</div>
-                  <div className="feed-body">
+                <div className="feed-body">
                     <strong>{actorLabel}</strong>
                     {' '}{side === 'BUY' ? 'bought' : 'sold'}{' '}
                     <span className={side === 'BUY' ? 'positive' : 'negative'}>{qty} shares</span>
@@ -347,7 +346,7 @@ const Home = () => {
                       "{payload.reason}"
                     </div>}
                     <div className="feed-time">{timeAgo(f.createdAt)}</div>
-                  </div>
+                </div>
                 </div>
               );
             })}
@@ -378,8 +377,8 @@ const Home = () => {
                 <div key={entry.id} className={`lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`}>
                   <div className="lb-rank">{medals[i] || entry.rank}</div>
                   <div className="lb-avatar">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
-                  <div className="lb-info">
-                    <div className="lb-name">
+                <div className="lb-info">
+                  <div className="lb-name">
                       {fullName}{u?.isVerified && ' ✓'}{isYou && ' (You)'}
                     </div>
                     <div className="lb-stats">

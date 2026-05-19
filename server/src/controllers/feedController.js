@@ -4,15 +4,36 @@ const { sanitizeFeedEvent } = require('../utils/feedAnonymize');
 const { fetchAndStoreNews } = require('../services/newsFetcher');
 const { refreshAllSignals } = require('../services/signalRefresher');
 
-async function fetchLatestSignals(limit = 10) {
-  return prisma.signal.findMany({
-    include: {
-      stock: { select: { ticker: true, displayTicker: true, name: true, price: true, changePct: true } },
-    },
+const SIGNAL_STOCK_INCLUDE = {
+  stock: { select: { ticker: true, displayTicker: true, name: true, price: true, changePct: true } },
+};
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Latest signal per stock, then a random subset for the dashboard board. */
+async function fetchLatestSignals(limit = 5) {
+  const recent = await prisma.signal.findMany({
+    include: SIGNAL_STOCK_INCLUDE,
     orderBy: { createdAt: 'desc' },
-    take: limit,
-    distinct: ['stockId'],
+    take: 500,
   });
+
+  const latestByStock = new Map();
+  for (const sig of recent) {
+    if (!latestByStock.has(sig.stockId)) {
+      latestByStock.set(sig.stockId, sig);
+    }
+  }
+
+  const pool = [...latestByStock.values()];
+  shuffleInPlace(pool);
+  return pool.slice(0, limit);
 }
 
 exports.getFeed = async (req, res) => {
@@ -93,7 +114,9 @@ exports.refreshNews = async (req, res) => {
 
 exports.getSignalsTop = async (req, res) => {
   try {
-    const signals = await fetchLatestSignals(10);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 5, 1), 20);
+    const signals = await fetchLatestSignals(limit);
+    res.set('Cache-Control', 'no-store');
     res.json(signals);
   } catch (error) {
     logger.error('getSignalsTop error', { error: error.message });
@@ -104,7 +127,7 @@ exports.getSignalsTop = async (req, res) => {
 exports.refreshSignals = async (req, res) => {
   try {
     const result = await refreshAllSignals();
-    const signals = await fetchLatestSignals(10);
+    const signals = await fetchLatestSignals(5);
 
     let message;
     if (result.updated === 0) {
