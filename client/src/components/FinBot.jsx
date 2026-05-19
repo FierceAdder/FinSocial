@@ -105,7 +105,9 @@ const FinBot = () => {
     if (!finbotPendingMessage) return;
     const msg = finbotPendingMessage;
     clearFinbotPending();
-    submitUserMessage(msg);
+    queueMicrotask(() => {
+      void submitUserMessage(msg);
+    });
   }, [finbotPendingMessage, clearFinbotPending, submitUserMessage]);
 
   const handleSend = async (e) => {

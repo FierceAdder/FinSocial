@@ -8,7 +8,10 @@ const POLL_MS = 90_000;
  */
 export default function useChartLivePoll({ enabled, onPoll }) {
   const onPollRef = useRef(onPoll);
-  onPollRef.current = onPoll;
+
+  useEffect(() => {
+    onPollRef.current = onPoll;
+  }, [onPoll]);
 
   useEffect(() => {
     if (!enabled) return undefined;

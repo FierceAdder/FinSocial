@@ -109,7 +109,10 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
     LANDING_PINNED_SECTIONS.findIndex((s) => s.id === activeId),
   );
   const indexRef = useRef(activeIndex);
-  indexRef.current = activeIndex;
+
+  useEffect(() => {
+    indexRef.current = activeIndex;
+  }, [activeIndex]);
 
   const setSlideByIndex = useCallback((index, { updateHash = false } = {}) => {
     const clamped = Math.min(lastIndex, Math.max(0, index));
