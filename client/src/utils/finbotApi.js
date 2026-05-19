@@ -1,5 +1,13 @@
 const DEFAULT_CONNECT_ERROR =
-  'Sorry, FinBot could not reach the API. If you are developing locally, start the stack (docker compose or core-api + gen-ai) or point VITE_DEV_BACKEND at a running API.';
+  'FinBot could not reach the core API (POST /api/tribe/finbot). gen-ai /health only checks the AI service — you also need core-api running. Locally: set VITE_DEV_BACKEND=http://localhost:5000 (Express) or :9999 (docker compose nginx), then restart Vite.';
+
+export function unexpectedFinbotResponse() {
+  return {
+    reply:
+      'The server responded but without a FinBot reply. Check core-api logs and that GEN_AI_SERVICE_URL points at your gen-ai service.',
+    source: 'error',
+  };
+}
 
 /**
  * Normalize FinBot API payloads so the UI always gets a string reply.
@@ -45,6 +53,8 @@ export function parseFinbotPayload(data) {
 }
 
 export function finbotConnectError(err) {
+  if (err == null) return unexpectedFinbotResponse();
+
   const fromBody = parseFinbotPayload(err?.response?.data);
   if (fromBody) return fromBody;
 

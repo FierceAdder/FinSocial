@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFinbotPayload, finbotConnectError } from './finbotApi';
+import { parseFinbotPayload, finbotConnectError, unexpectedFinbotResponse } from './finbotApi';
 
 describe('parseFinbotPayload', () => {
   it('reads reply and source', () => {
@@ -31,6 +31,16 @@ describe('finbotConnectError', () => {
   });
 
   it('handles network errors', () => {
-    expect(finbotConnectError({ code: 'ERR_NETWORK' }).reply).toMatch(/could not reach the API/i);
+    expect(finbotConnectError({ code: 'ERR_NETWORK' }).reply).toMatch(/could not reach the core API/i);
+  });
+
+  it('does not treat null as a network error', () => {
+    expect(finbotConnectError(null).reply).toMatch(/responded but without a FinBot reply/i);
+  });
+});
+
+describe('unexpectedFinbotResponse', () => {
+  it('returns a distinct message', () => {
+    expect(unexpectedFinbotResponse().reply).toMatch(/without a FinBot reply/i);
   });
 });

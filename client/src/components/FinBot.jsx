@@ -3,7 +3,12 @@ import { Sparkles, X } from 'lucide-react';
 import apiClient from '../api/client';
 import useStore from '../store';
 import FinBotMessage from './FinBotMessage';
-import { parseFinbotPayload, finbotConnectError } from '../utils/finbotApi';
+import { parseFinbotPayload, finbotConnectError, unexpectedFinbotResponse } from '../utils/finbotApi';
+
+const FINBOT_REQUEST_OPTS = {
+  skipAuthRedirect: true,
+  headers: { 'Cache-Control': 'no-cache' },
+};
 
 const FINBOT_SIZE_KEY = 'finsocial_finbot_size';
 const DEFAULT_W = 340;
@@ -67,7 +72,20 @@ const FinBot = () => {
 
   const submitUserMessage = useCallback(async (userMsg) => {
     const trimmed = userMsg.trim();
-    if (!trimmed || inFlightRef.current) return;
+    if (!trimmed) return;
+    if (inFlightRef.current) return;
+
+    const token = useStore.getState().token;
+    if (!token) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: trimmed },
+        { role: 'bot', content: 'Please log in to use FinBot (session token missing).' },
+      ]);
+      setAiSource('error');
+      return;
+    }
+
     inFlightRef.current = true;
 
     let snapshot;
@@ -77,8 +95,8 @@ const FinBot = () => {
     });
     setLoading(true);
 
-    try {
-      const history = snapshot
+    const history = () =>
+      snapshot
         .slice(0, -1)
         .slice(-6)
         .map((m) => ({
@@ -86,26 +104,30 @@ const FinBot = () => {
           content: m.content,
         }));
 
+    const postFinbot = () =>
+      apiClient.post('/tribe/finbot', { message: trimmed, history: history() }, FINBOT_REQUEST_OPTS);
+
+    try {
       let res;
       try {
-        res = await apiClient.post('/tribe/finbot', { message: trimmed, history });
+        res = await postFinbot();
       } catch (firstErr) {
         if (!firstErr.response && firstErr.code !== 'ECONNABORTED') {
           await new Promise((r) => setTimeout(r, 1200));
-          res = await apiClient.post('/tribe/finbot', { message: trimmed, history });
+          res = await postFinbot();
         } else {
           throw firstErr;
         }
       }
 
-      const parsed = parseFinbotPayload(res.data);
+      const parsed = parseFinbotPayload(res?.data);
       if (parsed) {
         setAiSource(parsed.source || null);
         setMessages((prev) => [...prev, { role: 'bot', content: parsed.reply }]);
       } else {
-        const fallback = finbotConnectError(null);
-        setAiSource(fallback.source);
-        setMessages((prev) => [...prev, { role: 'bot', content: fallback.reply }]);
+        const bad = unexpectedFinbotResponse();
+        setAiSource(bad.source);
+        setMessages((prev) => [...prev, { role: 'bot', content: bad.reply }]);
       }
     } catch (err) {
       const parsed = finbotConnectError(err);

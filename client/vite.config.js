@@ -5,7 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backend = env.VITE_DEV_BACKEND || 'http://localhost:9999'
+  // :5050 = Express (default; macOS AirPlay often blocks :5000); :9999 = docker nginx
+  const backend = env.VITE_DEV_BACKEND || 'http://localhost:5050'
 
   return {
   test: {
@@ -32,6 +33,7 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        navigateFallbackDenylist: [/^\/api/, /^\/socket\.io/],
       },
     }),
   ],

@@ -273,7 +273,10 @@ cd gen-ai-service && pytest test_health.py -v
 | Secret | Purpose |
 |--------|---------|
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | Deploy client |
-| `RENDER_API_KEY`, `RENDER_SERVICE_ID_API` | Trigger API deploy |
+| `RENDER_API_KEY` | Render deploy hook (all backend services) |
+| `RENDER_SERVICE_ID_API` | core-api service ID |
+| `RENDER_SERVICE_ID_ML` | ml-service service ID |
+| `RENDER_SERVICE_ID_GENAI` | gen-ai-service service ID |
 | `VITE_SENTRY_DSN` | Frontend error reporting |
 
 ---

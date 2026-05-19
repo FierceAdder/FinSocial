@@ -2,8 +2,10 @@ import axios from 'axios';
 import useStore from '../store';
 import { logoutAndGoLanding } from '../hooks/useLogout';
 
+const apiBase = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '');
+
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: apiBase,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
   timeout: 45_000,
@@ -21,7 +23,7 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.skipAuthRedirect) {
       logoutAndGoLanding();
     }
     return Promise.reject(error);

@@ -182,18 +182,41 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: npx --yes vercel@54 deploy --prod --yes
 
-  # ─── Deploy API to Render ─────────────────────────────────────────────────────
-  deploy-api:
-    name: Deploy core-api → Render
+  # ─── Deploy Render services (core-api, ml-service, gen-ai-service) ───────────
+  deploy-render:
+    name: Deploy ${{ matrix.service }} → Render
     runs-on: ubuntu-latest
     needs: [build-and-push]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [core-api, ml-service, gen-ai-service]
 
     steps:
       - name: Trigger Render deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
+          case "${{ matrix.service }}" in
+            core-api)       SERVICE_ID="${{ secrets.RENDER_SERVICE_ID_API }}" ;;
+            ml-service)     SERVICE_ID="${{ secrets.RENDER_SERVICE_ID_ML }}" ;;
+            gen-ai-service) SERVICE_ID="${{ secrets.RENDER_SERVICE_ID_GENAI }}" ;;
+          esac
+
+          if [ -z "$SERVICE_ID" ]; then
+            echo "Skipping ${{ matrix.service }}: Render service ID secret not set."
+            exit 0
+          fi
+
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "Skipping ${{ matrix.service }}: RENDER_API_KEY not set."
+            exit 0
+          fi
+
+          echo "Deploying ${{ matrix.service }} (service id ${SERVICE_ID:0:8}…)"
           curl -sfS -X POST \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_API }}/deploys" \
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
             -d '{"clearCache":"do_not_clear"}'
