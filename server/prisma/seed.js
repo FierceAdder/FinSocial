@@ -23,7 +23,7 @@ const STOCKS_DATA = [
   { ticker: 'ULTRACEMCO.NS', displayTicker: 'ULTRACEMCO', name: 'UltraTech Cement Limited', price: 10842.60, change: 122.30, changePct: 1.14, sector: 'Materials', industry: 'Cement', mcap: 3120000000000, pe: 42.1, high52: 12400, low52: 9200, volume: 380000 },
   { ticker: 'DRREDDY.NS', displayTicker: 'DRREDDY', name: "Dr. Reddy's Laboratories", price: 5812.40, change: -68.20, changePct: -1.16, sector: 'Pharma', industry: 'Pharmaceuticals', mcap: 972000000000, pe: 29.4, high52: 7200, low52: 5100, volume: 1240000 },
   { ticker: 'TATASTEEL.NS', displayTicker: 'TATASTEEL', name: 'Tata Steel Limited', price: 168.40, change: 2.10, changePct: 1.26, sector: 'Materials', industry: 'Steel', mcap: 2102000000000, pe: 8.2, high52: 184, low52: 120, volume: 82000000 },
-  { ticker: 'KOTAK.NS', displayTicker: 'KOTAKBANK', name: 'Kotak Mahindra Bank', price: 1842.60, change: -22.10, changePct: -1.19, sector: 'Banking', industry: 'Private Banks', mcap: 3652000000000, pe: 22.4, high52: 2190, low52: 1700, volume: 8200000 },
+  { ticker: 'KOTAKBANK.NS', displayTicker: 'KOTAKBANK', name: 'Kotak Mahindra Bank', price: 1842.60, change: -22.10, changePct: -1.19, sector: 'Banking', industry: 'Private Banks', mcap: 3652000000000, pe: 22.4, high52: 2190, low52: 1700, volume: 8200000 },
   { ticker: 'ONGC.NS', displayTicker: 'ONGC', name: 'Oil & Natural Gas Corporation', price: 284.60, change: 3.80, changePct: 1.35, sector: 'Energy', industry: 'Oil & Gas Exploration', mcap: 3582000000000, pe: 6.8, high52: 345, low52: 210, volume: 34200000 },
   { ticker: 'POWERGRID.NS', displayTicker: 'POWERGRID', name: 'Power Grid Corporation of India', price: 312.40, change: 4.20, changePct: 1.36, sector: 'Power', industry: 'Power Transmission', mcap: 2902000000000, pe: 18.2, high52: 366, low52: 242, volume: 14800000 },
   { ticker: 'ADANIENT.NS', displayTicker: 'ADANIENT', name: 'Adani Enterprises Limited', price: 2642.30, change: -48.20, changePct: -1.79, sector: 'Conglomerate', industry: 'Diversified', mcap: 3012000000000, pe: 96.4, high52: 3743, low52: 2024, volume: 2180000 },
@@ -51,26 +51,6 @@ const DUMMY_USERS = [
   { email: 'demo@finsocial.com', firstName: 'Demo', lastName: 'User', experienceLevel: 'beginner', isVerified: false, bio: 'Test account for demos.' },
 ];
 
-async function generateHistory(stockId, basePrice) {
-  const records = [];
-  let price = basePrice;
-  const today = new Date();
-  for (let i = 730; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    if (date.getDay() === 0 || date.getDay() === 6) continue; // skip weekends
-    const dailyReturn = (Math.random() - 0.48) * 0.03;
-    const open = price;
-    const close = price * (1 + dailyReturn);
-    const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-    const low = Math.min(open, close) * (1 - Math.random() * 0.01);
-    const volume = Math.floor(1000000 + Math.random() * 5000000);
-    records.push({ stockId, date, open: +open.toFixed(2), high: +high.toFixed(2), low: +low.toFixed(2), close: +close.toFixed(2), volume });
-    price = close;
-  }
-  return records;
-}
-
 async function main() {
   console.log('🌱 Starting rich seed...');
 
@@ -85,18 +65,7 @@ async function main() {
     stockMap[s.ticker] = stock;
   }
   console.log(`✓ ${Object.keys(stockMap).length} stocks seeded`);
-
-  // Synthetic ~2y daily OHLCV for every ticker (deterministic-ish charts without Yahoo).
-  let historyCount = 0;
-  const historyTickers = Object.keys(stockMap);
-  for (const ticker of historyTickers) {
-    const stock = stockMap[ticker];
-    const records = await generateHistory(stock.id, stock.price);
-    // Batch insert with skipDuplicates
-    await prisma.stockHistory.createMany({ data: records, skipDuplicates: true });
-    historyCount += records.length;
-  }
-  console.log(`✓ ${historyCount} stock history records seeded`);
+  console.log('  → Run npm run import-history for real Yahoo OHLCV (charts + XGBoost need this)');
 
   // Tribe channels
   const channelMap = {};

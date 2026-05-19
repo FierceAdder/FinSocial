@@ -61,18 +61,25 @@ async function importHistory() {
         continue;
       }
 
-      const records = result.map((row) => ({
-        stockId: stock.id,
-        date: row.date,
-        open: row.open || 0,
-        high: row.high || 0,
-        low: row.low || 0,
-        close: row.close || 0,
-        volume: row.volume || 0,
-      }));
+      const records = result
+        .filter((row) => row.date && Number.isFinite(row.close))
+        .map((row) => ({
+          stockId: stock.id,
+          date: new Date(row.date),
+          open: row.open || 0,
+          high: row.high || 0,
+          low: row.low || 0,
+          close: row.close || 0,
+          volume: row.volume || 0,
+        }));
 
-      await prisma.stockHistory.createMany({ data: records, skipDuplicates: true });
-      console.log(`  ✓ ${records.length} rows for ${stock.displayTicker}`);
+      // Replace any synthetic/seed rows so Yahoo OHLCV is authoritative
+      const deleted = await prisma.stockHistory.deleteMany({ where: { stockId: stock.id } });
+      const inserted = await prisma.stockHistory.createMany({ data: records });
+      console.log(
+        `  ✓ ${inserted.count} Yahoo rows for ${stock.displayTicker}` +
+          (deleted.count ? ` (replaced ${deleted.count} old rows)` : ''),
+      );
 
       // Respect rate limits
       await new Promise((r) => setTimeout(r, 500));

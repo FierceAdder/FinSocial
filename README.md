@@ -129,6 +129,19 @@ cd ml-service && pytest test_health.py -v
 cd gen-ai-service && pytest test_health.py -v
 ```
 
+### Retrain XGBoost (v2 features)
+
+Uses real `StockHistory` from Postgres, time-based validation, and scale-free features (`ml_features.py`).
+
+```bash
+cd server && npm run seed && npm run import-history   # seed = metadata; import-history = real Yahoo OHLCV
+cd ml-service
+DATABASE_URL="postgresql://..." python3 train_model.py
+# Redeploy ml-service (Dockerfile runs train at build when DB is available)
+```
+
+Check `/health` → `model_version: 2`, `model_loaded: true`. `/predict` → `model_used: true` and reasoning mentions `5d-ahead buy probability`.
+
 ## Deployment
 
 ### Render (API + ML + AI)

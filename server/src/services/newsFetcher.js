@@ -124,6 +124,7 @@ async function fetchAndStoreNews() {
   }
 
   let saved = 0;
+  let skipped = 0;
   const savedArticles = [];
 
   for (const article of articles) {
@@ -144,14 +145,22 @@ async function fetchAndStoreNews() {
             publishedAt: row.publishedAt,
           });
         }
+      } else {
+        skipped += 1;
       }
     } catch (err) {
       logger.warn('[News] Ingest failed', { url: article.url, error: err.message });
     }
   }
 
-  logger.info('[News] Fetch complete', { fetched: articles.length, saved });
-  return { fetched: articles.length, saved };
+  logger.info('[News] Fetch complete', { fetched: articles.length, saved, skipped });
+  const result = { fetched: articles.length, saved, skipped };
+  if (saved === 0 && articles.length > 0) {
+    result.message = 'No new headlines — stories from NewsAPI are already in your feed.';
+  } else if (saved > 0) {
+    result.message = `Added ${saved} new headline${saved === 1 ? '' : 's'}.`;
+  }
+  return result;
 }
 
 module.exports = { fetchAndStoreNews };

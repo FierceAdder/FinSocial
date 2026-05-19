@@ -24,7 +24,7 @@ function timeAgo(date) {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export default function NewsFeed({ articles = [], loading = false, error = null, onRefresh }) {
+export default function NewsFeed({ articles = [], loading = false, error = null, refreshMessage = null, onRefresh }) {
   const navigate = useNavigate();
 
   return (
@@ -39,6 +39,11 @@ export default function NewsFeed({ articles = [], loading = false, error = null,
       </div>
 
       {error && <div className="news-feed-error">{error}</div>}
+      {!error && refreshMessage && (
+        <div style={{ padding: '8px 12px', marginBottom: '8px', fontSize: '0.82rem', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: '8px' }}>
+          {refreshMessage}
+        </div>
+      )}
 
       {loading && articles.length === 0 ? (
         <div style={{ padding: '16px', color: 'var(--text3)', fontSize: '0.85rem' }}>Loading market news…</div>

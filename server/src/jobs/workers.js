@@ -30,7 +30,7 @@ const startWorkers = () => {
               reasoning: data.reasoning || '',
               rsi: data.technicals?.rsi || null,
               macd: data.technicals?.macd || null,
-              source: 'ml',
+              source: data.model_used ? 'xgboost' : 'heuristic',
             },
             include: { stock: { select: { ticker: true, displayTicker: true } } }
           });

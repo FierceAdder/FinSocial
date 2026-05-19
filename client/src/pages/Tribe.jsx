@@ -34,6 +34,8 @@ function parsePollCommand(body) {
 const Tribe = () => {
   const user = useStore((s) => s.user);
   const [channels, setChannels] = useState([]);
+  const [channelsLoading, setChannelsLoading] = useState(true);
+  const [channelsError, setChannelsError] = useState(null);
   const [currentChannel, setCurrentChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -54,12 +56,30 @@ const Tribe = () => {
   const socket = useSocket({});
 
   useEffect(() => {
-    apiClient.get('/tribe/channels').then((r) => {
-      setChannels(r.data);
-      if (r.data.length > 0) {
-        setCurrentChannel((prev) => prev || r.data[0]);
-      }
-    }).catch(() => undefined);
+    let cancelled = false;
+    setChannelsLoading(true);
+    setChannelsError(null);
+    apiClient
+      .get('/tribe/channels')
+      .then((r) => {
+        if (cancelled) return;
+        const list = Array.isArray(r.data) ? r.data : [];
+        setChannels(list);
+        if (list.length > 0) {
+          setCurrentChannel((prev) => prev || list[0]);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setChannels([]);
+        setChannelsError(
+          err.response?.data?.error || err.message || 'Could not load channels',
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setChannelsLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -220,22 +240,31 @@ const Tribe = () => {
         <aside className="tribe-channels">
           <div className="tribe-channels-header">Channels</div>
           <div className="tribe-channel-list">
-            {channels.length === 0 ? (
-              ['Beginner\'s Lounge', 'IPO Watch', 'Sector Spotlight', 'Platform Help', 'Mutual Funds Corner'].map((name) => (
-                <div key={name} className="tribe-channel-item skeleton">{name}</div>
-              ))
-            ) : (
-              channels.map((ch) => (
-                <button
-                  key={ch.id}
-                  type="button"
-                  className={`tribe-channel-item ${currentChannel?.id === ch.id ? 'active' : ''}`}
-                  onClick={() => setCurrentChannel(ch)}
-                >
-                  <span>#</span> {ch.name}
-                </button>
-              ))
+            {channelsLoading && (
+              <div style={{ padding: '12px', color: 'var(--text3)', fontSize: '0.85rem' }}>
+                Loading channels…
+              </div>
             )}
+            {!channelsLoading && channelsError && (
+              <div style={{ padding: '12px', color: '#dc2626', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                {channelsError}
+              </div>
+            )}
+            {!channelsLoading && !channelsError && channels.length === 0 && (
+              <div style={{ padding: '12px', color: 'var(--text3)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                No channels available. Try refreshing the page.
+              </div>
+            )}
+            {!channelsLoading && !channelsError && channels.map((ch) => (
+              <button
+                key={ch.id}
+                type="button"
+                className={`tribe-channel-item ${currentChannel?.id === ch.id ? 'active' : ''}`}
+                onClick={() => setCurrentChannel(ch)}
+              >
+                <span>#</span> {ch.name}
+              </button>
+            ))}
           </div>
           <div className="tribe-channel-tips">
             <div style={{ fontSize: '0.75rem', color: 'var(--text3)', padding: '12px', lineHeight: 1.6 }}>
@@ -249,10 +278,10 @@ const Tribe = () => {
         <div className="tribe-chat">
           <div className="tribe-chat-header">
             <span className="tribe-chat-channel-name">
-              #{currentChannel?.name || 'Loading...'}
+              #{currentChannel?.name || (channelsLoading ? 'Loading…' : channelsError ? 'Unavailable' : 'Select a channel')}
             </span>
             <span className="tribe-chat-desc">
-              {currentChannel?.description || 'Select a channel'}
+              {currentChannel?.description || (channelsError ? channelsError : 'Select a channel from the list')}
             </span>
             <div className="tribe-online-badge">
               <span className="online-dot" />

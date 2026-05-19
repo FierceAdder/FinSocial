@@ -9,6 +9,7 @@ const FinBot = () => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [aiSource, setAiSource] = useState(null);
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -27,13 +28,28 @@ const FinBot = () => {
     try {
       const history = messages.slice(-6).map((m) => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.content }));
       const res = await apiClient.post('/tribe/finbot', { message: userMsg, history });
+      setAiSource(res.data.source || null);
       setMessages((prev) => [...prev, { role: 'bot', content: res.data.reply }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: 'bot', content: 'Sorry, I\'m having trouble connecting. Please try again in a moment.' }]);
+    } catch (err) {
+      const body = err.response?.data;
+      const msg =
+        body?.reply ||
+        body?.error ||
+        'Sorry, FinBot could not connect. Check that gen-ai is deployed and GEN_AI_SERVICE_URL is set on the API.';
+      setAiSource(body?.source || 'error');
+      setMessages((prev) => [...prev, { role: 'bot', content: msg }]);
     } finally {
       setLoading(false);
     }
   };
+
+  const subtitle = aiSource === 'gemini'
+    ? 'Powered by Gemini'
+    : aiSource === 'fallback'
+      ? 'Demo replies — connect gen-ai for full AI'
+      : aiSource === 'error'
+        ? 'AI service unavailable'
+        : 'FinBot assistant';
 
   return (
     <div className="chatbot-wrapper">
@@ -45,7 +61,9 @@ const FinBot = () => {
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>FinBot</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>Powered by Gemini AI</div>
+              <div style={{ fontSize: '0.72rem', color: aiSource === 'fallback' ? '#b45309' : 'var(--text3)' }}>
+                {subtitle}
+              </div>
             </div>
           </div>
           <button type="button" className="chatbot-close" onClick={() => setOpen(false)} aria-label="Close FinBot">

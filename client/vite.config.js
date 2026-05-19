@@ -32,13 +32,6 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\/api\/portfolio/,
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'portfolio-cache', expiration: { maxAgeSeconds: 300 } },
-          },
-        ],
       },
     }),
   ],

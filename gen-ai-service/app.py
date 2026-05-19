@@ -270,7 +270,7 @@ Rules:
             response = await asyncio.to_thread(_once)
             reply_text = _response_text(response)
             if reply_text:
-                return {"reply": reply_text}
+                return {"reply": reply_text, "source": "gemini"}
             logger.warning(
                 "Gemini returned empty text for /chat (model=%s). Check API key, quota, model id, or blocked content.",
                 GEMINI_MODEL,
@@ -291,7 +291,7 @@ Rules:
     else:
         reply = "I'm FinBot! I can help with stock analysis, portfolio questions, market concepts, or explain any FinSocial feature. What would you like to know?"
 
-    return {"reply": reply}
+    return {"reply": reply, "source": "fallback"}
 
 
 @app.post("/suggest-answer")

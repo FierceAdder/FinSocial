@@ -4,7 +4,14 @@ const logger = require('../utils/logger');
 const { ensureTribeChannelsIfNeeded } = require('../utils/ensureTribeChannels');
 
 const { genAiBaseUrl } = require('../utils/serviceUrls');
+const { finbotKeywordFallback } = require('../utils/finbotFallback');
 const GEN_AI_URL = genAiBaseUrl();
+
+function isGenAiUnreachable(err) {
+  if (err.response) return false;
+  const code = err.code || '';
+  return ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'ETIMEDOUT', 'ECONNABORTED'].includes(code);
+}
 
 exports.getChannels = async (req, res) => {
   try {
@@ -138,26 +145,44 @@ exports.getPolls = async (req, res) => {
 };
 
 exports.finbotReply = async (req, res) => {
-  try {
-    const { message, history } = req.body;
+  const { message, history } = req.body;
 
+  try {
     const response = await axios.post(`${GEN_AI_URL}/chat`, { message, history }, { timeout: 30000 });
-    res.json(response.data);
+    return res.json(response.data);
   } catch (error) {
     const data = error.response?.data;
     logger.error('finbotReply error', {
       message: error.message,
+      code: error.code,
       status: error.response?.status,
       upstream: typeof data === 'string' ? data.slice(0, 300) : data,
       genAiUrl: `${GEN_AI_URL}/chat`,
+      genAiConfigured: Boolean(process.env.GEN_AI_SERVICE_URL),
     });
+
+    if (isGenAiUnreachable(error)) {
+      if (!process.env.GEN_AI_SERVICE_URL) {
+        return res.status(503).json({
+          reply:
+            'FinBot is not linked to the AI service. On Render, set GEN_AI_SERVICE_URL on core-api to your gen-ai URL (e.g. https://your-gen-ai.onrender.com), then redeploy.',
+          source: 'error',
+        });
+      }
+      return res.json({
+        reply: finbotKeywordFallback(message),
+        source: 'fallback',
+      });
+    }
+
     const d = data && typeof data === 'object' ? data.detail : null;
     const reply =
       typeof d === 'string'
         ? d
-        : 'Could not reach FinBot AI. Open gen-ai /health — llm_ready and gemini_key_configured should be true; set GEMINI_API_KEY in gen-ai-service/.env and restart.';
+        : data?.reply ||
+          'FinBot AI error. Check gen-ai /health (llm_ready, gemini_key_configured) and GEMINI_API_KEY on the gen-ai service.';
     const st = typeof error.response?.status === 'number' ? error.response.status : 503;
     const outStatus = st >= 400 && st < 499 ? st : 503;
-    res.status(outStatus).json({ reply });
+    return res.status(outStatus).json({ reply, source: 'error' });
   }
 };

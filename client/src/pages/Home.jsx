@@ -27,29 +27,41 @@ const Home = () => {
   const [newsArticles, setNewsArticles] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState(null);
+  const [newsRefreshMsg, setNewsRefreshMsg] = useState(null);
+  const [dashLoading, setDashLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch all data in parallel
+    let cancelled = false;
+    setDashLoading(true);
     Promise.all([
       apiClient.get('/stocks').catch(() => ({ data: [] })),
       apiClient.get('/portfolio').catch(() => ({ data: null })),
       apiClient.get('/feed').catch(() => ({ data: [] })),
       apiClient.get('/feed/signals').catch(() => ({ data: [] })),
-    ]).then(([stocksRes, portfolioRes, feedRes, signalsRes]) => {
-      setTrendingTickers(stocksRes.data.slice(0, 8).map((s) => ({
-        tickerDisplay: s.displayTicker || s.ticker,
-        tickerFull: s.ticker,
-        price: s.price,
-        chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
-        up: s.changePct >= 0,
-        id: s.id,
-      })));
+    ])
+      .then(([stocksRes, portfolioRes, feedRes, signalsRes]) => {
+        if (cancelled) return;
+        const raw = stocksRes.data;
+        const list = Array.isArray(raw) ? raw : [];
+        setTrendingTickers(list.slice(0, 8).map((s) => ({
+          tickerDisplay: s.displayTicker || s.ticker,
+          tickerFull: s.ticker,
+          price: s.price,
+          chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
+          up: s.changePct >= 0,
+          id: s.id,
+        })));
 
-      if (portfolioRes.data) setPortfolioStats(portfolioRes.data);
-      setFeedItems(feedRes.data.slice(0, 6));
-      setSignals(signalsRes.data.slice(0, 5));
-    });
-
+        if (portfolioRes.data) setPortfolioStats(portfolioRes.data);
+        const feed = Array.isArray(feedRes.data) ? feedRes.data : [];
+        setFeedItems(feed.slice(0, 6));
+        const sig = Array.isArray(signalsRes.data) ? signalsRes.data : [];
+        setSignals(sig.slice(0, 5));
+      })
+      .finally(() => {
+        if (!cancelled) setDashLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -86,15 +98,22 @@ const Home = () => {
   }, [chartRange, chartBaseHistory, chart1dHistory, chartInterval]);
 
   useEffect(() => {
-    if (leaderboardData[period]) return;
-    apiClient.get(`/leaderboard?period=${period}`).then((r) => {
-      setLeaderboardData((prev) => ({ ...prev, [period]: r.data }));
-    }).catch(() => undefined);
+    if (leaderboardData[period] !== undefined) return;
+    apiClient
+      .get(`/leaderboard?period=${period}`)
+      .then((r) => {
+        const rows = Array.isArray(r.data) ? r.data : [];
+        setLeaderboardData((prev) => ({ ...prev, [period]: rows }));
+      })
+      .catch(() => {
+        setLeaderboardData((prev) => ({ ...prev, [period]: [] }));
+      });
   }, [period, leaderboardData]);
 
   const loadNews = async (refresh = false) => {
     setNewsLoading(true);
     setNewsError(null);
+    if (refresh) setNewsRefreshMsg(null);
     try {
       const endpoint = refresh ? '/feed/news/refresh' : '/feed/news';
       const r = refresh
@@ -102,8 +121,12 @@ const Home = () => {
         : await apiClient.get(endpoint);
       const list = r.data.articles ?? r.data;
       setNewsArticles(Array.isArray(list) ? list.slice(0, 12) : []);
-      if (refresh && r.data.error && r.data.saved === 0) {
-        setNewsError(r.data.error);
+      if (refresh) {
+        if (r.data.error && r.data.saved === 0) {
+          setNewsError(r.data.error);
+        } else if (r.data.message) {
+          setNewsRefreshMsg(r.data.message);
+        }
       }
     } catch (err) {
       setNewsError(err.response?.data?.error || err.message || 'Could not load news');
@@ -227,7 +250,9 @@ const Home = () => {
             </div>
           )) : (
             <div style={{ color: 'var(--text3)', fontSize: '0.85rem' }}>
-              Loading signals… refreshed about every 15 minutes.
+              {dashLoading
+                ? 'Loading signals…'
+                : 'No signals yet. Refreshed about every 15 minutes.'}
             </div>
           )}
         </div>
@@ -239,6 +264,7 @@ const Home = () => {
           articles={newsArticles}
           loading={newsLoading}
           error={newsError}
+          refreshMessage={newsRefreshMsg}
           onRefresh={() => loadNews(true)}
         />
       </div>
@@ -290,7 +316,7 @@ const Home = () => {
           <div id="leaderboardContent">
             {currentLb.length === 0 ? (
               <div style={{ padding: '16px', color: 'var(--text3)', fontSize: '0.85rem' }}>
-                Loading leaderboard...
+                {leaderboardData[period] === undefined ? 'Loading leaderboard…' : 'No leaderboard data yet.'}
               </div>
             ) : currentLb.map((entry, i) => {
               const medals = ['🥇', '🥈', '🥉'];
