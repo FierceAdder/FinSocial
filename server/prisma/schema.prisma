@@ -36,6 +36,7 @@ model User {
   forumVotes      ForumVote[]
   notifications   Notification[]
   watchlist       WatchlistItem[]
+  priceAlerts     PriceAlert[]
   following       Follow[]           @relation("Follower")
   followers       Follow[]           @relation("Following")
   feedEvents      FeedEvent[]
@@ -65,6 +66,7 @@ model Stock {
   sentimentVotes SentimentVote[]
   signals        Signal[]
   watchlistItems WatchlistItem[]
+  priceAlerts    PriceAlert[]
 }
 
 model StockHistory {
@@ -274,6 +276,24 @@ model WatchlistItem {
   createdAt DateTime @default(now())
 
   @@unique([userId, stockId])
+}
+
+model PriceAlert {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockId     String
+  stock       Stock     @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  targetPrice Float
+  direction   String    // ABOVE | BELOW — crosses above / below target
+  frequency   String    // ONCE | EVERY
+  isActive    Boolean   @default(true)
+  lastPrice   Float     // previous price snapshot for cross detection
+  triggeredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([stockId, isActive])
+  @@index([userId, isActive])
 }
 
 model NewsArticle {

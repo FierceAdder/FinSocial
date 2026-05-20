@@ -132,7 +132,7 @@ Takes a few minutes for all tickers.
 
 - **Tribe** — Real-time channels; polls (`/poll Buy/Sell/Hold TICKER?`); FinBot in-channel.
 - **Forum** — Voting, accepted answers, AI-suggested replies.
-- **FinBot** — Gemini + RAG; server-side keyword fallback if Gen-AI is unreachable.
+- **FinBot** — Gemini + RAG; model chain (`gemini-3-flash-preview` → `gemini-3.1-flash-lite`); keyword fallback if all models fail.
 - **Sentiment** — Per-stock community votes.
 - **Hindsight** — Replay a historical date and estimate P&amp;L.
 
@@ -296,6 +296,8 @@ cd gen-ai-service && pytest test_health.py -v
 |----------|----------|
 | `DATABASE_URL` | Yes |
 | `GEMINI_API_KEY` | Yes for real AI |
+| `GEMINI_MODEL` | Primary model (default `gemini-3-flash-preview`) |
+| `GEMINI_MODEL_FALLBACKS` | Comma-separated backup (default `gemini-3.1-flash-lite`) |
 
 ### ml-service
 
@@ -321,6 +323,7 @@ See each service’s `.env.example` for the full list.
 | Login 500 with `CORS_ORIGIN=*` | Deploy latest API (`corsOrigins` reflects browser origin). |
 | Tribe stuck on “Loading” | Ensure `entrypoint.sh` ran; channels auto-created on startup. |
 | FinBot generic / 503 | Set `GEN_AI_SERVICE_URL` on API and `GEMINI_API_KEY` on gen-ai. |
+| FinBot preview model fails | Set `GEMINI_MODEL_FALLBACKS=gemini-3.1-flash-lite` on gen-ai; check `/health` → `gemini_model_chain`. |
 | Signals never update | Redis + core-api workers running; `ML_SERVICE_URL` reachable. |
 | Socket.IO fails on Vercel | Set `VITE_BACKEND_URL` to Render API; do not rely on `/socket.io` rewrite. |
 | Charts flat / Hindsight empty | Run `npm run import-history`. |

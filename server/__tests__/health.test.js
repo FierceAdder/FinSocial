@@ -77,4 +77,9 @@ describe('Protected Routes', () => {
     const res = await request(app).get('/api/notifications');
     expect(res.statusCode).toBe(401);
   });
+
+  it('GET /api/alerts — returns 401 without token', async () => {
+    const res = await request(app).get('/api/alerts');
+    expect(res.statusCode).toBe(401);
+  });
 });

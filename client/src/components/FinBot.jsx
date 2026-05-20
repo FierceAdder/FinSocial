@@ -195,7 +195,7 @@ const FinBot = () => {
     document.addEventListener('pointerup', onUp);
   };
 
-  const subtitle = aiSource === 'gemini'
+  const subtitle = aiSource === 'gemini' || aiSource === 'gemini-fallback'
     ? 'Powered by Gemini'
     : aiSource === 'fallback'
       ? 'Demo replies — connect gen-ai for full AI'

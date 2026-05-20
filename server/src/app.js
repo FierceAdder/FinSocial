@@ -52,6 +52,7 @@ app.use('/api/tribe', require('./routes/tribe'));
 app.use('/api/feed', require('./routes/feed'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/watchlist', require('./routes/watchlist'));
+app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/social', require('./routes/social'));
 app.use('/api/system', require('./routes/system'));

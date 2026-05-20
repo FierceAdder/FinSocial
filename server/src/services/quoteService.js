@@ -2,6 +2,7 @@ const YahooFinance = require('yahoo-finance2').default;
 const { fetchGlobalQuote } = require('../providers/alphavantage');
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
+const { evaluatePriceAlertsForStock } = require('./priceAlertService');
 
 const yf = new YahooFinance();
 
@@ -55,6 +56,7 @@ async function persistQuoteUpdate(ticker, q) {
   if (!q || !Number.isFinite(q.price)) return;
 
   const existing = await prisma.stock.findUnique({ where: { ticker } });
+  const previousPrice = existing?.price;
 
   if (!existing) {
     await prisma.stock.create({
@@ -91,6 +93,14 @@ async function persistQuoteUpdate(ticker, q) {
       lastUpdated: new Date(),
     },
   });
+
+  if (Number.isFinite(previousPrice) && previousPrice !== q.price) {
+    try {
+      await evaluatePriceAlertsForStock(existing.id, previousPrice, q.price);
+    } catch (err) {
+      logger.warn('[PriceAlert] Evaluation failed', { ticker, error: err.message });
+    }
+  }
 }
 
 function sleep(ms) {

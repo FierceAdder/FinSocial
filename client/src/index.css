@@ -481,10 +481,13 @@ table.data-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .modal-close{position:absolute;top:12px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text3);padding:4px}
 .modal-close:hover{color:var(--text)}
 .trade-tabs{display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.trade-tab{flex:1;padding:10px;text-align:center;font-weight:700;cursor:pointer;border:none;background:var(--bg);font-size:.88rem;font-family:var(--font);transition:all .15s}
+.trade-tab{flex:1;padding:10px;text-align:center;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text2);font-size:.88rem;font-family:var(--font);transition:all .15s}
+.trade-tab.active{background:var(--blue);color:#fff}
 .trade-tab.active[data-side="BUY"]{background:var(--green);color:#fff}
 .trade-tab.active[data-side="SELL"]{background:var(--red);color:#fff}
-.trade-tab:hover:not(.active){background:var(--bg2)}
+.trade-tab.active[data-choice="above"]{background:var(--green);color:#fff}
+.trade-tab.active[data-choice="below"]{background:var(--red);color:#fff}
+.trade-tab:hover:not(.active){background:var(--bg2);color:var(--text)}
 .trade-total{display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--bg2);border-radius:var(--radius);margin-top:12px;font-size:.88rem}
 
 /* ═══ WATCHLIST ═══ */

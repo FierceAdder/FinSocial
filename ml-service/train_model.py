@@ -5,6 +5,10 @@ Uses time-based validation, scale-free features, and 5-day forward-return labels
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import joblib
 import numpy as np
 import pandas as pd

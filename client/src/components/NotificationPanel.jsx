@@ -30,6 +30,7 @@ const NotificationPanel = ({ open }) => {
     const icons = {
       forum_answer: '💬',
       signal_alert: '📊',
+      price_alert: '🔔',
       trade_alert: '💹',
       news_alert: '📰',
       mentor_match: '🎓',

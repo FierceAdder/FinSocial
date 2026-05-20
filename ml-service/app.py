@@ -2,6 +2,10 @@ import os
 import logging
 from datetime import datetime, timedelta
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -72,14 +76,32 @@ def get_finbert():
     return finbert_pipeline
 
 # ── Database ───────────────────────────────────────────────────────────────────
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+def _normalize_database_url(url: str) -> str:
+    """Strip quotes from .env and require SSL for Render Postgres from local/dev."""
+    url = (url or "").strip().strip('"').strip("'")
+    if not url:
+        return ""
+    if "render.com" in url and "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    return url
+
+
+DATABASE_URL = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
 db_engine = None
 if DATABASE_URL:
     try:
         db_engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-        logger.info("Database connected")
+        with db_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connected (using StockHistory for /predict)")
     except Exception as e:
         logger.warning("DB connection failed: %s", e)
+        db_engine = None
+else:
+    logger.warning(
+        "DATABASE_URL not set — put it in ml-service/.env or export it; /predict uses yfinance only"
+    )
 
 
 def load_close_panel(tickers: list, lookback_days: int = 730) -> pd.DataFrame:

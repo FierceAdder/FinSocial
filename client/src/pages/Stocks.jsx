@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Bell } from 'lucide-react';
 import apiClient from '../api/client';
 import MarketChart from '../components/MarketChart';
+import PriceAlertModal from '../components/PriceAlertModal';
 import ChartRangeSelector from '../components/ChartRangeSelector';
 import ChartTypeSelector from '../components/ChartTypeSelector';
 import useChartLivePoll from '../hooks/useChartLivePoll';
@@ -85,6 +87,8 @@ const Stocks = () => {
   const [loading, setLoading] = useState(true);
   const [selectedStock, setSelectedStock] = useState(null);
   const [showTradeModal, setShowTradeModal] = useState(false);
+  const [showPriceAlertModal, setShowPriceAlertModal] = useState(false);
+  const [stockAlerts, setStockAlerts] = useState([]);
   const [sentiment, setSentiment] = useState(null);
   const [tradeToast, setTradeToast] = useState('');
   const [chartRange, setChartRange] = useState('2y');
@@ -131,6 +135,17 @@ const Stocks = () => {
       setSentiment({ bullish: 60, neutral: 25, bearish: 15, total: 0, userVote: null });
     });
   }, [ticker]);
+
+  useEffect(() => {
+    if (!selectedStock?.id) {
+      setStockAlerts([]);
+      return;
+    }
+    apiClient
+      .get('/alerts', { params: { stockId: selectedStock.id, activeOnly: 'true' } })
+      .then((r) => setStockAlerts(r.data))
+      .catch(() => setStockAlerts([]));
+  }, [selectedStock?.id]);
 
   const fetchIntraday = useCallback((t, silent = false) => {
     if (!silent) setChartLoading(true);
@@ -211,6 +226,16 @@ const Stocks = () => {
       <div className="page stock-detail-view fade-in">
         {tradeToast && <div className="trade-toast">{tradeToast}</div>}
         {showTradeModal && <TradeModal stock={s} onClose={() => setShowTradeModal(false)} onTraded={(side, qty) => showToast(`✓ ${side} ${qty} shares of ${s.displayTicker}`)} />}
+        {showPriceAlertModal && (
+          <PriceAlertModal
+            stock={s}
+            onClose={() => setShowPriceAlertModal(false)}
+            onCreated={(alert) => {
+              setStockAlerts((prev) => [alert, ...prev]);
+              showToast(`✓ Price alert set for ${s.displayTicker}`);
+            }}
+          />
+        )}
 
         <button className="stock-back" onClick={() => setSearchParams({})}>← Back to Stocks</button>
         <div className="card">
@@ -226,6 +251,16 @@ const Stocks = () => {
                   {pl ? '+' : ''}₹{s.change?.toFixed(2)} ({pl ? '+' : ''}{s.changePct?.toFixed(2)}%)
                 </div>
               </div>
+              <button
+                type="button"
+                className={`btn btn-sm ${stockAlerts.length ? 'btn-primary' : ''}`}
+                title={stockAlerts.length ? `${stockAlerts.length} active alert(s)` : 'Set price alert'}
+                onClick={() => setShowPriceAlertModal(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Bell size={16} />
+                {stockAlerts.length > 0 ? stockAlerts.length : 'Alert'}
+              </button>
               <button className="btn btn-primary" onClick={() => setShowTradeModal(true)}>Trade</button>
             </div>
           </div>

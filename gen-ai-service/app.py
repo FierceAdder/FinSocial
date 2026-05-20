@@ -18,22 +18,21 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import json
 
+from gemini_llm import (
+    GEMINI_MODEL,
+    gemini_model_chain,
+    generate_stream_sse_lines,
+    generate_text,
+    gemini_result_payload,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-# Explicit key (Docker / local .env). SDK also recognizes GOOGLE_API_KEY in some setups.
 GEMINI_API_KEY = (
     (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
 )
-
-try:
-    from google.genai import types as genai_types
-
-    GEMINI_GEN_CONFIG = genai_types.GenerateContentConfig(temperature=0.4)
-except Exception:
-    GEMINI_GEN_CONFIG = None
 
 # ── Embedding model (sentence-transformers, 384d) ──────────────────────────────
 embedder = None
@@ -66,41 +65,6 @@ if DATABASE_URL and embedder:
 gemini_client = None
 
 
-def _generate_kwargs(contents: str):
-    kw = {"model": GEMINI_MODEL, "contents": contents}
-    if GEMINI_GEN_CONFIG is not None:
-        kw["config"] = GEMINI_GEN_CONFIG
-    return kw
-
-
-def _response_text(response) -> str:
-    if response is None:
-        return ""
-    t = getattr(response, "text", None)
-    if t and str(t).strip():
-        return str(t).strip()
-    try:
-        candidates = getattr(response, "candidates", None) or []
-        if candidates:
-            content = getattr(candidates[0], "content", None)
-            parts = getattr(content, "parts", None) if content else None
-            if parts:
-                blobs = []
-                for p in parts:
-                    txt = getattr(p, "text", None)
-                    if txt:
-                        blobs.append(txt)
-                merged = "".join(blobs).strip()
-                if merged:
-                    return merged
-    except Exception:
-        pass
-    fb = getattr(response, "prompt_feedback", None)
-    if fb is not None:
-        logger.warning("Gemini response had no extractable text; prompt_feedback=%s", fb)
-    return ""
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global gemini_client
@@ -110,7 +74,11 @@ async def lifespan(app: FastAPI):
             from google import genai
 
             gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-            logger.info("Gemini client initialized (model=%s)", GEMINI_MODEL)
+            chain = gemini_model_chain()
+            logger.info(
+                "Gemini client initialized (chain=%s)",
+                " → ".join(chain) if chain else GEMINI_MODEL,
+            )
         except Exception as e:
             logger.warning("Gemini client failed to initialize: %s", e)
     else:
@@ -174,6 +142,7 @@ class TribeBotRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
+    chain = gemini_model_chain()
     return {
         "status": "ok",
         "service": "gen-ai-service",
@@ -181,7 +150,8 @@ def health_check():
         "vector_store_ready": vector_store is not None,
         "llm_ready": gemini_client is not None,
         "gemini_key_configured": bool(GEMINI_API_KEY),
-        "gemini_model": GEMINI_MODEL,
+        "gemini_model": chain[0] if chain else GEMINI_MODEL,
+        "gemini_model_chain": chain,
     }
 
 
@@ -245,36 +215,15 @@ Rules:
     if gemini_client:
         try:
             if req.stream:
-                def _stream_chunks():
-                    parts = []
-                    stream_fn = getattr(gemini_client.models, "generate_content_stream", None)
-                    if stream_fn:
-                        for chunk in stream_fn(**_generate_kwargs(full_prompt)):
-                            piece = _response_text(chunk)
-                            if piece:
-                                parts.append(f"data: {json.dumps({'delta': piece})}\n\n")
-                    else:
-                        resp = gemini_client.models.generate_content(**_generate_kwargs(full_prompt))
-                        body = _response_text(resp)
-                        if body:
-                            parts.append(f"data: {json.dumps({'delta': body})}\n\n")
-                    parts.append("data: [DONE]\n\n")
-                    return parts
+                chunks, model = await asyncio.to_thread(
+                    generate_stream_sse_lines, gemini_client, full_prompt
+                )
+                if chunks and model:
+                    return StreamingResponse(iter(chunks), media_type="text/event-stream")
 
-                chunks = await asyncio.to_thread(_stream_chunks)
-                return StreamingResponse(iter(chunks), media_type="text/event-stream")
-
-            def _once():
-                return gemini_client.models.generate_content(**_generate_kwargs(full_prompt))
-
-            response = await asyncio.to_thread(_once)
-            reply_text = _response_text(response)
-            if reply_text:
-                return {"reply": reply_text, "source": "gemini"}
-            logger.warning(
-                "Gemini returned empty text for /chat (model=%s). Check API key, quota, model id, or blocked content.",
-                GEMINI_MODEL,
-            )
+            text, model = await asyncio.to_thread(generate_text, gemini_client, full_prompt)
+            if text and model:
+                return gemini_result_payload(text, model, reply_key="reply")
         except Exception as e:
             logger.error("Gemini chat error: %s", e)
 
@@ -313,18 +262,13 @@ Provide a helpful, educational answer (3-5 sentences). Be specific, use examples
 
     if gemini_client:
         try:
-            def _once():
-                return gemini_client.models.generate_content(**_generate_kwargs(prompt))
-
-            response = await asyncio.to_thread(_once)
-            text = _response_text(response)
-            if text:
-                return {"suggestion": text}
-            logger.warning("Empty suggestion from Gemini (model=%s)", GEMINI_MODEL)
+            text, model = await asyncio.to_thread(generate_text, gemini_client, prompt)
+            if text and model:
+                payload = gemini_result_payload(text, model, reply_key="suggestion")
+                return {"suggestion": payload["suggestion"], "source": payload["source"], "gemini_model": payload["gemini_model"]}
         except Exception as e:
             logger.error("AI suggest error: %s", e)
 
-    # Fallback
     return {
         "suggestion": f"Based on the question about {req.questionTitle[:50]}, here is a general perspective: Focus on understanding the fundamentals first, then look at technical signals for timing. The FinSocial Signal Board can provide additional context. Check the Beginner's Lounge Tribe Room for community perspectives on this topic."
     }
@@ -343,20 +287,18 @@ Return format: {{"summary": "...", "tickers": ["TICKER.NS", ...]}}"""
 
     if gemini_client:
         try:
-            def _once():
-                return gemini_client.models.generate_content(**_generate_kwargs(prompt))
-
-            response = await asyncio.to_thread(_once)
-            content = _response_text(response).strip()
-            if content:
-                if content.startswith("{"):
-                    data = json.loads(content)
+            content, model = await asyncio.to_thread(generate_text, gemini_client, prompt)
+            if content and model:
+                raw = content.strip()
+                if raw.startswith("{"):
+                    data = json.loads(raw)
                 else:
                     import re
-                    match = re.search(r'\{.*\}', content, re.DOTALL)
-                    data = json.loads(match.group()) if match else {"summary": content, "tickers": []}
+                    match = re.search(r"\{.*\}", raw, re.DOTALL)
+                    data = json.loads(match.group()) if match else {"summary": raw, "tickers": []}
+                data["source"] = gemini_result_payload(content, model)["source"]
+                data["gemini_model"] = model
                 return data
-            logger.warning("Empty summarize response from Gemini (model=%s)", GEMINI_MODEL)
         except Exception as e:
             logger.error("News summarization error: %s", e)
 
@@ -379,14 +321,10 @@ Respond briefly (2-3 sentences max) and helpfully. This is a live chat, so be co
 
     if gemini_client:
         try:
-            def _once():
-                return gemini_client.models.generate_content(**_generate_kwargs(prompt))
-
-            response = await asyncio.to_thread(_once)
-            rt = _response_text(response)
-            if rt:
-                return {"reply": rt}
-            logger.warning("Empty tribe-bot reply from Gemini (model=%s)", GEMINI_MODEL)
+            text, model = await asyncio.to_thread(generate_text, gemini_client, prompt)
+            if text and model:
+                payload = gemini_result_payload(text, model, reply_key="reply")
+                return {"reply": payload["reply"], "source": payload["source"], "gemini_model": payload["gemini_model"]}
         except Exception as e:
             logger.error("Tribe bot error: %s", e)
 
