@@ -56,16 +56,6 @@ exports.createAlert = async (req, res) => {
     const userId = req.user.userId;
     const { stockId, targetPrice, direction, frequency } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-    if (!user) {
-      return res.status(401).json({
-        error: 'Session expired. Log out and sign in again (your account may have been reset in the database).',
-      });
-    }
-
     if (!stockId) {
       return res.status(400).json({ error: 'stockId is required' });
     }
@@ -103,11 +93,6 @@ exports.createAlert = async (req, res) => {
     res.status(201).json(serializeAlert(alert));
   } catch (error) {
     logger.error('createAlert error', { error: error.message });
-    if (error.code === 'P2003') {
-      return res.status(401).json({
-        error: 'Session expired. Log out and sign in again (your account may have been reset in the database).',
-      });
-    }
     res.status(500).json({ error: 'Failed to create alert' });
   }
 };

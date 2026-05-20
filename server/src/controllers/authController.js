@@ -125,11 +125,7 @@ exports.getMe = async (req, res) => {
         isVerified: true, bio: true, avatarUrl: true,
       }
     });
-    if (!user) {
-      return res.status(401).json({
-        error: 'Session expired. Log out and sign in again.',
-      });
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (error) {
     logger.error('getMe error', { error: error.message, userId: req.user?.userId });

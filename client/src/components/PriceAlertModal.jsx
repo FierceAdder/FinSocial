@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import apiClient from '../api/client';
-import { logoutAndGoLanding } from '../hooks/useLogout';
 
 const PriceAlertModal = ({ stock, onClose, onCreated }) => {
   const [targetPrice, setTargetPrice] = useState(
@@ -25,11 +24,7 @@ const PriceAlertModal = ({ stock, onClose, onCreated }) => {
       onCreated?.(res.data);
       onClose();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to create alert';
-      setError(msg);
-      if (err.response?.status === 401) {
-        setTimeout(() => logoutAndGoLanding(), 2500);
-      }
+      setError(err.response?.data?.error || 'Failed to create alert');
     } finally {
       setLoading(false);
     }
@@ -74,7 +69,6 @@ const PriceAlertModal = ({ stock, onClose, onCreated }) => {
               <button
                 type="button"
                 className={`trade-tab ${direction === 'ABOVE' ? 'active' : ''}`}
-                data-choice="above"
                 onClick={() => setDirection('ABOVE')}
               >
                 At or above
@@ -82,7 +76,6 @@ const PriceAlertModal = ({ stock, onClose, onCreated }) => {
               <button
                 type="button"
                 className={`trade-tab ${direction === 'BELOW' ? 'active' : ''}`}
-                data-choice="below"
                 onClick={() => setDirection('BELOW')}
               >
                 At or below
