@@ -193,9 +193,9 @@ const Home = () => {
         const toTickerRow = (s) => ({
           tickerDisplay: s.displayTicker || s.ticker,
           tickerFull: s.ticker,
-          price: s.price,
+        price: s.price,
           changePct: s.changePct ?? 0,
-          chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
+        chg: `${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(2)}%`,
           up: s.changePct >= 0,
           id: s.id,
         });
@@ -518,7 +518,7 @@ const Home = () => {
             <h2 className="dashboard-section-title" style={{ marginBottom: '4px' }}>🔥 Trending on FinSocial</h2>
             <p className="dashboard-section-desc">Top 8 by daily % change</p>
           </div>
-          <div className="trending-strip">
+        <div className="trending-strip">
             {trendingTickers.map((t) => (
               <div
                 key={t.tickerFull}
@@ -526,11 +526,11 @@ const Home = () => {
                 onClick={() => openStockPage(t.tickerFull)}
               >
                 <span className="trending-ticker mono">{t.tickerDisplay}</span>
-                <span className="trending-price mono">₹{t.price?.toFixed(0)}</span>
-                <span className={`mono ${t.up ? 'positive' : 'negative'}`}>{t.chg}</span>
-              </div>
-            ))}
-          </div>
+              <span className="trending-price mono">₹{t.price?.toFixed(0)}</span>
+              <span className={`mono ${t.up ? 'positive' : 'negative'}`}>{t.chg}</span>
+            </div>
+          ))}
+        </div>
         </section>
         </div>
 
@@ -593,7 +593,7 @@ const Home = () => {
               {(!signalsReady && !signals.length) || signalsLoading
                 ? 'Loading signals…'
                 : 'No signals yet. Tap Refresh or wait for auto-refresh.'}
-            </div>
+        </div>
           )}
         </section>
       </div>

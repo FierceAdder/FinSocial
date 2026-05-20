@@ -218,7 +218,8 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
         cols = model_bundle.get("feature_columns", FEATURE_COLUMNS) if model_bundle else FEATURE_COLUMNS
         features = pd.DataFrame([feat_row[cols].astype(float)])
         buy_prob = float(model.predict_proba(features)[0][1])
-        confidence = int(max(50, min(95, buy_prob * 100)))
+        raw_confidence = buy_prob if buy_prob > 0.5 else (1.0 - buy_prob)
+        confidence = int(max(50, min(95, raw_confidence * 100)))
         verdict = "BUY" if buy_prob > 0.55 else ("SELL" if buy_prob < 0.45 else "HOLD")
         model_used = True
     else:
