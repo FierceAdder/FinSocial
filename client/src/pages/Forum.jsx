@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
+import useStore from '../store';
+import { getForumListCache, isForumListFresh, setForumListCache } from '../utils/appCache';
 import { APP_BASE } from '../constants/routes';
 
 const Forum = () => {
   const navigate = useNavigate();
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const user = useStore((s) => s.user);
+  const forumCache = getForumListCache();
+  const [questions, setQuestions] = useState(
+    isForumListFresh(user?.id) ? forumCache.questions : [],
+  );
+  const [loading, setLoading] = useState(!isForumListFresh(user?.id));
   const [showAskForm, setShowAskForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newBody, setNewBody] = useState('');
@@ -15,15 +21,20 @@ const Forum = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    if (!isForumListFresh(user?.id)) setLoading(true);
     apiClient.get('/forum').then((res) => {
-      setQuestions(res.data);
+      const list = res.data;
+      setQuestions(list);
+      setForumListCache(list, user?.id);
     }).catch(() => {
-      setQuestions([
-        { id: '1', title: 'How do I read a candlestick chart?', body: 'Just starting out...', tags: ['Beginner'], votes: 42, views: 104, _count: { answers: 2 }, user: { username: 'arjun99' }, createdAt: new Date().toISOString() },
-        { id: '2', title: 'What is the impact of Fed rate cuts on IT sector?', body: 'Curious about TCS...', tags: ['Macro', 'IT'], votes: 28, views: 76, _count: { answers: 1 }, user: { username: 'priya_m' }, createdAt: new Date().toISOString() },
-      ]);
+      if (!isForumListFresh(user?.id)) {
+        setQuestions([
+          { id: '1', title: 'How do I read a candlestick chart?', body: 'Just starting out...', tags: ['Beginner'], votes: 42, views: 104, _count: { answers: 2 }, user: { username: 'arjun99' }, createdAt: new Date().toISOString() },
+          { id: '2', title: 'What is the impact of Fed rate cuts on IT sector?', body: 'Curious about TCS...', tags: ['Macro', 'IT'], votes: 28, views: 76, _count: { answers: 1 }, user: { username: 'priya_m' }, createdAt: new Date().toISOString() },
+        ]);
+      }
     }).finally(() => setLoading(false));
-  }, []);
+  }, [user?.id]);
 
   const handleAskQuestion = async (e) => {
     e.preventDefault();
@@ -33,7 +44,11 @@ const Forum = () => {
         body: newBody,
         tags: newTags.split(',').map((t) => t.trim()).filter(Boolean),
       });
-      setQuestions((prev) => [res.data, ...prev]);
+      setQuestions((prev) => {
+        const next = [res.data, ...prev];
+        setForumListCache(next, user?.id);
+        return next;
+      });
       setShowAskForm(false);
       setNewTitle(''); setNewBody(''); setNewTags('');
     } catch {
@@ -45,7 +60,11 @@ const Forum = () => {
     e.stopPropagation();
     try {
       const r = await apiClient.post(`/forum/${id}/vote`, { direction });
-      setQuestions((prev) => prev.map((q) => q.id === id ? { ...q, votes: r.data.votes } : q));
+      setQuestions((prev) => {
+        const next = prev.map((q) => (q.id === id ? { ...q, votes: r.data.votes } : q));
+        setForumListCache(next, user?.id);
+        return next;
+      });
     } catch {
       /* ignore vote failure */
     }
@@ -68,7 +87,7 @@ const Forum = () => {
   else if (filter === 'unanswered') filtered = filtered.filter((q) => (q._count?.answers || 0) === 0);
 
   return (
-    <div className="page fade-in">
+    <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>Q&A Forum</h1>

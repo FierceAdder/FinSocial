@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import useStore from '../store';
+import {
+  getPortfolioCache,
+  isPortfolioFresh,
+  isTradeHistoryFresh,
+  setPortfolioCache,
+} from '../utils/appCache';
 import HoldingTickerMenu from '../components/HoldingTickerMenu';
 import { APP_BASE } from '../constants/routes';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -12,23 +18,39 @@ const Portfolio = () => {
   const navigate = useNavigate();
   const user = useStore((state) => state.user);
   const askFinBot = useStore((state) => state.askFinBot);
-  const [holdings, setHoldings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [portfolioData, setPortfolioData] = useState(null);
+  const portCache = getPortfolioCache();
+  const [holdings, setHoldings] = useState(
+    isPortfolioFresh(user?.id) ? (portCache.data?.holdings || []) : [],
+  );
+  const [loading, setLoading] = useState(!isPortfolioFresh(user?.id));
+  const [portfolioData, setPortfolioData] = useState(
+    isPortfolioFresh(user?.id) ? portCache.data : null,
+  );
   const [optimizeResult, setOptimizeResult] = useState(null);
   const [optimizeMeta, setOptimizeMeta] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
-  const [tradeHistory, setTradeHistory] = useState([]);
+  const [tradeHistory, setTradeHistory] = useState(
+    isTradeHistoryFresh(user?.id) ? portCache.tradeHistory : [],
+  );
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
+    const silent = isPortfolioFresh(user?.id);
+    if (!silent) setLoading(true);
+
     apiClient.get('/portfolio').then((res) => {
       setPortfolioData(res.data);
       setHoldings(res.data.holdings || []);
+      setPortfolioCache({ data: res.data, userId: user?.id });
     }).catch(() => {}).finally(() => setLoading(false));
 
-    apiClient.get('/trades/history').then((r) => setTradeHistory(r.data)).catch(() => {});
-  }, []);
+    if (!isTradeHistoryFresh(user?.id)) {
+      apiClient.get('/trades/history').then((r) => {
+        setTradeHistory(r.data);
+        setPortfolioCache({ tradeHistory: r.data, userId: user?.id });
+      }).catch(() => {});
+    }
+  }, [user?.id]);
 
   const handleViewCharts = useCallback((ticker) => {
     navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(ticker)}`);
@@ -94,7 +116,7 @@ const Portfolio = () => {
   }, []);
 
   return (
-    <div className="page fade-in">
+    <div className="page">
       <h1 className="page-title">Portfolio</h1>
 
       <div className="port-summary">

@@ -1,7 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import apiClient from '../api/client';
+import useStore from '../store';
+import {
+  resolveCachedChart,
+  getStockDetailCache,
+  getStocksListCache,
+  invalidatePortfolioCache,
+  isStockDetailFresh,
+  isStocksListFresh,
+  isWatchlistFresh,
+  setCachedChartForTicker,
+  setStockDetailCache,
+  setStocksListCache,
+} from '../utils/appCache';
 import MarketChart from '../components/MarketChart';
 import PriceAlertModal from '../components/PriceAlertModal';
 import ChartRangeSelector from '../components/ChartRangeSelector';
@@ -78,13 +91,19 @@ const TradeModal = ({ stock, onClose, onTraded }) => {
 };
 
 const Stocks = () => {
+  const user = useStore((s) => s.user);
   const [searchParams, setSearchParams] = useSearchParams();
   const ticker = searchParams.get('ticker');
+  const listCache = getStocksListCache();
   const [filter, setFilter] = useState('all');
-  const [watchlist, setWatchlist] = useState([]);
+  const [watchlist, setWatchlist] = useState(
+    isWatchlistFresh(user?.id) ? listCache.watchlist : [],
+  );
   const [searchQuery, setSearchQuery] = useState('');
-  const [stocksData, setStocksData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [stocksData, setStocksData] = useState(
+    isStocksListFresh(user?.id) ? listCache.list : [],
+  );
+  const [loading, setLoading] = useState(!isStocksListFresh(user?.id));
   const [selectedStock, setSelectedStock] = useState(null);
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [showPriceAlertModal, setShowPriceAlertModal] = useState(false);
@@ -98,43 +117,79 @@ const Stocks = () => {
   const [showVolume, setShowVolume] = useState(true);
 
   useEffect(() => {
-    // Load stocks
+    const silentList = isStocksListFresh(user?.id);
+    const silentWl = isWatchlistFresh(user?.id);
+    if (!silentList) setLoading(true);
+
     apiClient.get('/stocks').then((r) => {
-      setStocksData(r.data);
+      const list = Array.isArray(r.data) ? r.data : [];
+      setStocksData(list);
+      setStocksListCache({ list, userId: user?.id });
     }).catch(() => {}).finally(() => setLoading(false));
 
-    // Load server-side watchlist
     apiClient.get('/watchlist').then((r) => {
-      setWatchlist(r.data.map((s) => s.ticker));
+      const wl = r.data.map((s) => s.ticker);
+      setWatchlist(wl);
+      setStocksListCache({ watchlist: wl, userId: user?.id });
     }).catch(() => {
-      // Fallback to localStorage
-      const saved = localStorage.getItem('finsocial_watchlist');
-      if (saved) setWatchlist(JSON.parse(saved));
+      if (!silentWl) {
+        const saved = localStorage.getItem('finsocial_watchlist');
+        if (saved) setWatchlist(JSON.parse(saved));
+      }
     });
-  }, []);
+  }, [user?.id]);
 
-  // When ticker param changes, load detail
+  const detailFetchRef = useRef(null);
+
   useEffect(() => {
     if (!ticker) {
       setSelectedStock(null);
       return;
     }
-    setChartLoading(true);
+    const cached = getStockDetailCache(ticker);
+    const chartCached = resolveCachedChart(ticker);
+    if (cached?.detail) {
+      const detail = chartCached?.base?.length
+        ? { ...cached.detail, history: chartCached.base, historyInterval: chartCached.interval }
+        : cached.detail;
+      setSelectedStock(detail);
+      setChartLoading(false);
+    }
+    if (cached?.sentiment) setSentiment(cached.sentiment);
+    const silent = Boolean(cached?.detail) && isStockDetailFresh(ticker, user?.id);
+    if (!silent) setChartLoading(true);
+    if (detailFetchRef.current === ticker) return;
+    detailFetchRef.current = ticker;
+
     apiClient
-      .get(`/stocks/${encodeURIComponent(ticker)}`, { params: { range: '2y' } })
+      .get(`/stocks/${encodeURIComponent(ticker)}`, { params: { range: '2y', skipQuote: '1' } })
       .then((r) => {
         setSelectedStock(r.data);
         setIntradayBars(null);
+        setCachedChartForTicker(ticker, {
+          base: r.data.history || [],
+          intraday: [],
+          interval: r.data.historyInterval || '1d',
+        });
+        setStockDetailCache(ticker, { detail: r.data, sentiment: cached?.sentiment });
       })
       .catch(() => {})
-      .finally(() => setChartLoading(false));
+      .finally(() => {
+        if (detailFetchRef.current === ticker) detailFetchRef.current = null;
+        setChartLoading(false);
+      });
 
     apiClient.get(`/stocks/${encodeURIComponent(ticker)}/sentiment`).then((r) => {
       setSentiment(r.data);
+      const prev = getStockDetailCache(ticker);
+      setStockDetailCache(ticker, { detail: prev?.detail, sentiment: r.data });
     }).catch(() => {
-      setSentiment({ bullish: 60, neutral: 25, bearish: 15, total: 0, userVote: null });
+      const fallback = { bullish: 60, neutral: 25, bearish: 15, total: 0, userVote: null };
+      setSentiment(fallback);
+      const prev = getStockDetailCache(ticker);
+      setStockDetailCache(ticker, { detail: prev?.detail, sentiment: fallback });
     });
-  }, [ticker]);
+  }, [ticker, user?.id]);
 
   useEffect(() => {
     if (!selectedStock?.id) {
@@ -147,13 +202,30 @@ const Stocks = () => {
       .catch(() => setStockAlerts([]));
   }, [selectedStock?.id]);
 
+  const intradayFetchRef = useRef(null);
+
   const fetchIntraday = useCallback((t, silent = false) => {
-    if (!silent) setChartLoading(true);
+    const chartCached = resolveCachedChart(t);
+    if (chartCached?.intraday?.length) {
+      setIntradayBars({ history: chartCached.intraday, interval: chartCached.interval || 'intraday' });
+    }
+    if (!silent && !(chartCached?.intraday?.length)) setChartLoading(true);
+    if (intradayFetchRef.current === t) return Promise.resolve();
+    intradayFetchRef.current = t;
     return apiClient
-      .get(`/stocks/${encodeURIComponent(t)}`, { params: { range: '1d' } })
-      .then((r) => setIntradayBars({ history: r.data.history || [], interval: r.data.historyInterval || 'intraday' }))
+      .get(`/stocks/${encodeURIComponent(t)}`, { params: { range: '1d', skipQuote: '1' } })
+      .then((r) => {
+        const bars = { history: r.data.history || [], interval: r.data.historyInterval || 'intraday' };
+        setIntradayBars(bars);
+        setCachedChartForTicker(t, {
+          base: chartCached?.base ?? [],
+          intraday: bars.history,
+          interval: bars.interval,
+        });
+      })
       .catch(() => setIntradayBars(null))
       .finally(() => {
+        if (intradayFetchRef.current === t) intradayFetchRef.current = null;
         if (!silent) setChartLoading(false);
       });
   }, []);
@@ -162,8 +234,19 @@ const Stocks = () => {
     if (!ticker) return Promise.resolve();
     if (!silent) setChartLoading(true);
     return apiClient
-      .get(`/stocks/${encodeURIComponent(ticker)}`, { params: { range: '2y' } })
-      .then((r) => setSelectedStock(r.data))
+      .get(`/stocks/${encodeURIComponent(ticker)}`, {
+        params: { range: '2y', ...(silent ? {} : { skipQuote: '1' }) },
+      })
+      .then((r) => {
+        setSelectedStock(r.data);
+        const prev = resolveCachedChart(ticker);
+        setCachedChartForTicker(ticker, {
+          base: r.data.history || [],
+          intraday: prev?.intraday ?? [],
+          interval: r.data.historyInterval || '1d',
+        });
+        setStockDetailCache(ticker, { detail: r.data });
+      })
       .catch(() => {})
       .finally(() => {
         if (!silent) setChartLoading(false);
@@ -223,9 +306,18 @@ const Stocks = () => {
     const chartData = historyToChartData(rawHistory, chartRange, interval);
 
     return (
-      <div className="page stock-detail-view fade-in">
+      <div className="page stock-detail-view">
         {tradeToast && <div className="trade-toast">{tradeToast}</div>}
-        {showTradeModal && <TradeModal stock={s} onClose={() => setShowTradeModal(false)} onTraded={(side, qty) => showToast(`✓ ${side} ${qty} shares of ${s.displayTicker}`)} />}
+        {showTradeModal && (
+          <TradeModal
+            stock={s}
+            onClose={() => setShowTradeModal(false)}
+            onTraded={(side, qty) => {
+              invalidatePortfolioCache();
+              showToast(`✓ ${side} ${qty} shares of ${s.displayTicker}`);
+            }}
+          />
+        )}
         {showPriceAlertModal && (
           <PriceAlertModal
             stock={s}
@@ -392,7 +484,7 @@ const Stocks = () => {
   }
 
   return (
-    <div className="page fade-in">
+    <div className="page">
       <h1 className="page-title">Stocks</h1>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
         <input

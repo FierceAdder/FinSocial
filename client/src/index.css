@@ -54,7 +54,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:
 }
 
 /* ═══ Common Components ═══ */
-.page{animation:fadeIn .3s ease}
+.page{/* no entry animation on app routes — avoids flash on navigation */}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .page-title{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin-bottom:20px}
 .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
@@ -306,7 +306,7 @@ table.data-table{width:100%;border-collapse:collapse;font-size:.85rem}
 /* ═══ STOCKS ═══ */
 .stocks-search{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:.9rem;margin-bottom:16px;font-family:var(--font);outline:none;background:var(--bg)}
 .stocks-search:focus{border-color:var(--accent)}
-.stock-detail-view{animation:fadeIn .2s ease}
+.stock-detail-view{/* no entry animation */}
 .stock-back{display:inline-flex;align-items:center;gap:4px;font-size:.85rem;color:var(--text2);cursor:pointer;margin-bottom:16px;background:none;border:none;font-family:var(--font);font-weight:500}
 .stock-back:hover{color:var(--text)}
 .stock-info-bar{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:16px}

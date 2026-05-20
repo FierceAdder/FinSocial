@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client';
 import useStore from '../store';
+import {
+  getTribeChannelsCache,
+  getTribeMessagesCache,
+  isTribeChannelsFresh,
+  isTribeMessagesFresh,
+  setTribeChannelsCache,
+  setTribeMessagesCache,
+} from '../utils/appCache';
 import { useSocket } from '../hooks/useSocket';
 import TribePollCard from '../components/TribePollCard';
 
@@ -33,8 +41,10 @@ function parsePollCommand(body) {
 
 const Tribe = () => {
   const user = useStore((s) => s.user);
-  const [channels, setChannels] = useState([]);
-  const [channelsLoading, setChannelsLoading] = useState(true);
+  const [channels, setChannels] = useState(
+    isTribeChannelsFresh(user?.id) ? getTribeChannelsCache() : [],
+  );
+  const [channelsLoading, setChannelsLoading] = useState(!isTribeChannelsFresh(user?.id));
   const [channelsError, setChannelsError] = useState(null);
   const [currentChannel, setCurrentChannel] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -57,14 +67,18 @@ const Tribe = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setChannelsLoading(true);
-    setChannelsError(null);
+    const silent = isTribeChannelsFresh(user?.id);
+    if (!silent) {
+      setChannelsLoading(true);
+      setChannelsError(null);
+    }
     apiClient
       .get('/tribe/channels')
       .then((r) => {
         if (cancelled) return;
         const list = Array.isArray(r.data) ? r.data : [];
         setChannels(list);
+        setTribeChannelsCache(list, user?.id);
         if (list.length > 0) {
           setCurrentChannel((prev) => prev || list[0]);
         }
@@ -80,7 +94,7 @@ const Tribe = () => {
         if (!cancelled) setChannelsLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!currentChannel || !socket) return;
@@ -88,17 +102,28 @@ const Tribe = () => {
     socket.emit('join_room', currentChannel.id);
     setPollCountOverrides({});
 
+    const msgCache = getTribeMessagesCache(currentChannel.id);
+    if (isTribeMessagesFresh(currentChannel.id, user?.id) && msgCache?.messages) {
+      setMessages(msgCache.messages);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+
     apiClient
       .get(`/tribe/channels/${currentChannel.id}/messages`)
       .then((r) => {
         setMessages(r.data);
+        setTribeMessagesCache(currentChannel.id, r.data);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       })
       .catch(() => undefined);
 
     const handleMessage = (msg) => {
       if (msg.channelId != null && msg.channelId !== currentChannel.id) return;
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      setMessages((prev) => {
+        const next = prev.some((m) => m.id === msg.id) ? prev : [...prev, msg];
+        if (next !== prev) setTribeMessagesCache(currentChannel.id, next);
+        return next;
+      });
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     };
 
@@ -114,7 +139,13 @@ const Tribe = () => {
 
     const onPollPayload = ({ message }) => {
       if (!message?.channelId || message.channelId !== channelIdRef.current) return;
-      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+      setMessages((prev) => {
+        const next = prev.some((m) => m.id === message.id) ? prev : [...prev, message];
+        if (next !== prev && channelIdRef.current) {
+          setTribeMessagesCache(channelIdRef.current, next);
+        }
+        return next;
+      });
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     };
 
@@ -138,7 +169,11 @@ const Tribe = () => {
 
   const mergeAnnouncement = (message) => {
     if (!message?.id) return;
-    setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+    setMessages((prev) => {
+      const next = prev.some((m) => m.id === message.id) ? prev : [...prev, message];
+      if (next !== prev && currentChannel?.id) setTribeMessagesCache(currentChannel.id, next);
+      return next;
+    });
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
 
@@ -234,7 +269,7 @@ const Tribe = () => {
   const formatTime = (ts) => new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div id="tribePage" className="page tribe-page fade-in">
+    <div id="tribePage" className="page tribe-page">
       <h1 className="page-title">Tribe Rooms</h1>
       <div className="tribe-layout">
         <aside className="tribe-channels">
