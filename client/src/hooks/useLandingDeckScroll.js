@@ -79,8 +79,9 @@ function consumeWheel(accumRef, deltaY, threshold) {
 
 /**
  * Wheel-driven presentation deck inside pinned #explore.
+ * @param {boolean} [enabled=true] — set false on small screens (normal scroll layout).
  */
-export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
+export function useLandingDeckScroll(activeId, setActiveId, setInDeck, enabled = true) {
   const slideCount = LANDING_PINNED_SECTIONS.length;
   const lastIndex = slideCount - 1;
 
@@ -320,6 +321,13 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
   ]);
 
   const scrollToSlideId = useCallback((id, behavior = 'smooth') => {
+    if (!enabled) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior, block: 'start' });
+      const index = LANDING_PINNED_SECTIONS.findIndex((s) => s.id === id);
+      if (index >= 0) setSlideByIndex(index, { updateHash: true });
+      return;
+    }
     const index = LANDING_PINNED_SECTIONS.findIndex((s) => s.id === id);
     if (index < 0) return;
     clearReentryBlock();
@@ -330,9 +338,18 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
     setSlideByIndex(index, { updateHash: true });
     const top = getExploreTop();
     if (top != null) window.scrollTo({ top, behavior });
-  }, [clearReentryBlock, setSlideByIndex]);
+  }, [clearReentryBlock, enabled, setSlideByIndex]);
 
   useEffect(() => {
+    if (!enabled) {
+      deckActiveRef.current = false;
+      inDeckUiRef.current = false;
+      setInDeck(false);
+    }
+  }, [enabled, setInDeck]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
     const syncInDeck = () => {
       if (isReentryBlocked() && isAboveExplore()) clearReentryBlock();
       if (deckActiveRef.current && isAboveExplore()) disengageDeck();
@@ -351,9 +368,10 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
       window.removeEventListener('scroll', syncInDeck);
       window.removeEventListener('resize', syncInDeck);
     };
-  }, [clearReentryBlock, disengageDeck, isReentryBlocked, setInDeck]);
+  }, [clearReentryBlock, disengageDeck, enabled, isReentryBlocked, setInDeck]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const flushWheel = () => {
       wheelFrameRef.current = 0;
       const delta = wheelPendingRef.current;
@@ -395,9 +413,10 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
       window.removeEventListener('touchend', onTouchEnd);
       if (wheelFrameRef.current) cancelAnimationFrame(wheelFrameRef.current);
     };
-  }, [handleWheelDelta, shouldCaptureWheel]);
+  }, [enabled, handleWheelDelta, shouldCaptureWheel]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const applyHash = (fromHashChange) => {
       const id = window.location.hash.replace('#', '');
       const index = LANDING_PINNED_SECTIONS.findIndex((s) => s.id === id);
@@ -434,7 +453,7 @@ export function useLandingDeckScroll(activeId, setActiveId, setInDeck) {
     const onHashChange = () => applyHash(true);
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, [disengageDeck, scrollToSlideId, setSlideByIndex]);
+  }, [disengageDeck, enabled, scrollToSlideId, setSlideByIndex]);
 
   return { scrollToSlideId };
 };

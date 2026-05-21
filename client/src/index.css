@@ -1586,6 +1586,68 @@ body[data-page=landing]{
 
 @media(max-width:768px){.landing-hero-copy{max-width:none}}
 
+/* Mobile: scrollable sections instead of pinned presentation deck */
+.landing-mobile{display:none}
+@media(max-width:768px){
+  .landing-mobile{
+    display:flex;
+    flex-direction:column;
+    gap:clamp(8px,2vh,20px);
+    padding:clamp(20px,4vh,36px) 0 clamp(12px,2vh,24px);
+  }
+  .landing-deck-panel{display:none!important}
+  .landing-root--mobile .landing-scroll-hint{display:none}
+  .landing-mobile-section{
+    scroll-margin-top:calc(var(--landing-scroll-padding, 64px) + 8px);
+    padding:clamp(28px,5vh,44px) 0;
+    border-bottom:1px solid rgba(233,236,239,.75);
+  }
+  .landing-mobile-section:last-of-type{border-bottom:none}
+  .landing-mobile-section__head{margin-bottom:clamp(16px,3vh,24px)}
+  .landing-mobile-section__head .landing-kicker{margin:0 0 8px}
+  .landing-mobile-section__head .landing-section-title{margin:0 0 8px}
+  .landing-mobile-section__head .landing-section-sub{margin:0}
+  .landing-mobile .landing-hub-grid{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .landing-mobile .landing-hub-grid > .landing-card{grid-column:auto}
+  .landing-mobile .landing-steps{margin-top:0}
+  .landing-mobile .landing-bento{margin-top:0}
+  .landing-mobile .landing-deck-quotes{
+    display:flex;
+    flex-direction:row;
+    gap:14px;
+    overflow-x:auto;
+    padding:4px 2px 16px;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    grid-template-columns:none;
+  }
+  .landing-mobile .landing-deck-quotes .landing-quote{
+    flex:0 0 min(300px,88vw);
+    scroll-snap-align:start;
+  }
+  .landing-mobile .landing-faq-list{margin-top:0}
+  .landing-mobile .landing-faq-a.open{max-height:none}
+  .landing-mobile-section--cta{
+    border-bottom:none;
+    padding-bottom:clamp(12px,2vh,20px);
+  }
+  .landing-mobile-section--cta .landing-mobile-section__head{display:none}
+  .landing-mobile-section--cta .landing-mobile-section__body{
+    padding:clamp(24px,4vw,36px) clamp(16px,4vw,24px);
+    border-radius:18px;
+    background:linear-gradient(135deg,rgba(240,253,244,.92),rgba(239,246,255,.9));
+    border:1px solid rgba(233,236,239,.92);
+    box-shadow:0 12px 40px rgba(0,0,0,.055);
+  }
+  .landing-mobile .landing-deck-slide--cta{width:100%}
+  .landing-root--mobile .landing-canvas-parallax-stack{
+    transform:translate3d(0,var(--landing-parallax-y,0px),0) scale(1);
+  }
+}
+
 /* Feature 1C - Community Bar */
 .signal-community-row {
   display: flex;

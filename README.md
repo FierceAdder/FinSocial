@@ -102,8 +102,8 @@ Takes a few minutes for all tickers.
 ### Landing & onboarding
 
 - **Hero** — 3D candlestick scene with parallax; stats marquee; scroll hint on the first viewport.
-- **Presentation deck** — Six pinned slides (Hub, Flow, Tools, Voices, FAQ, Start) in one explore panel: left timeline with curved progress, right glass detail card.
-- **Wheel-driven tour** — Scroll down from Trust into the deck and through slides; scroll up to reverse; exit at Hub (hero) or Start (footer).
+- **Presentation deck (tablet/desktop)** — Six pinned slides (Hub, Flow, Tools, Voices, FAQ, Start) in one explore panel: left timeline with curved progress, right glass detail card. Wheel-driven scroll through slides.
+- **Mobile layout (≤768px)** — Same content as the deck, in a normal vertical scroll (hero → trust → feature sections → footer); no pinned deck or wheel capture.
 - **Trust strip** — Social proof pills before the product tour.
 
 ### Trading & portfolio

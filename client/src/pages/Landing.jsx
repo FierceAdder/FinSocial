@@ -15,9 +15,12 @@ import { LandingScrollYRef } from './landingScrollContext.jsx';
 import { LANDING_HEADER_SECTIONS } from './landingSections.js';
 import { useLandingSectionSpy } from '../hooks/useLandingSectionSpy';
 import { useLandingDeckScroll } from '../hooks/useLandingDeckScroll.js';
+import { useMobileLanding } from '../hooks/useMobileLanding.js';
 import LandingPresentationDeck from '../components/LandingPresentationDeck.jsx';
 import LandingPanel from '../components/LandingPanel.jsx';
+import LandingMobileSections from '../components/LandingMobileSections.jsx';
 import { buildLandingDeckSlides } from './landingDeckSlides.jsx';
+import { LANDING_PINNED_SECTIONS } from './landingSections.js';
 
 const MARQUEE_ITEMS = [
   { text: 'NIFTY 50 ▲ simulated' },
@@ -167,18 +170,38 @@ function AnimatedStat({ value, label, suffix = '', prefix = '' }) {
 
 export default function Landing() {
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const isMobileLanding = useMobileLanding();
   const [scrolledNav, setScrolledNav] = useState(false);
   const [deckActiveId, setDeckActiveId] = useState('hub');
   const [inDeck, setInDeck] = useState(false);
-  const scrollSpyId = useLandingSectionSpy([
-    { id: 'hero' },
-    { id: 'trust' },
-    { id: 'explore' },
-  ]);
-  const activeSectionId = inDeck ? deckActiveId : scrollSpyId;
+
+  const scrollSpySections = useMemo(
+    () => (isMobileLanding
+      ? [
+        { id: 'hero' },
+        { id: 'trust' },
+        ...LANDING_PINNED_SECTIONS.map((s) => ({ id: s.id })),
+      ]
+      : [
+        { id: 'hero' },
+        { id: 'trust' },
+        { id: 'explore' },
+      ]),
+    [isMobileLanding],
+  );
+
+  const scrollSpyId = useLandingSectionSpy(scrollSpySections);
+  const activeSectionId = isMobileLanding
+    ? scrollSpyId
+    : (inDeck ? deckActiveId : scrollSpyId);
   const landingScrollYRef = useRef(0);
 
-  const { scrollToSlideId } = useLandingDeckScroll(deckActiveId, setDeckActiveId, setInDeck);
+  const { scrollToSlideId } = useLandingDeckScroll(
+    deckActiveId,
+    setDeckActiveId,
+    setInDeck,
+    !isMobileLanding,
+  );
 
   useEffect(() => {
     const prevRestoration = history.scrollRestoration;
@@ -225,13 +248,15 @@ export default function Landing() {
   const [openFaq, setOpenFaq] = useState(/** @type {number | null} */ (null));
 
   const deckSlides = useMemo(
-    () => buildLandingDeckSlides({ isAuthenticated, openFaq, setOpenFaq }),
-    [isAuthenticated, openFaq],
+    () => (isMobileLanding
+      ? []
+      : buildLandingDeckSlides({ isAuthenticated, openFaq, setOpenFaq })),
+    [isAuthenticated, isMobileLanding, openFaq],
   );
 
   return (
     <LandingScrollYRef.Provider value={landingScrollYRef}>
-    <div className="landing-root">
+    <div className={`landing-root${isMobileLanding ? ' landing-root--mobile' : ''}`}>
       <div className="landing-canvas-wrap" aria-hidden>
         <div className="landing-canvas-parallax-stack">
           <Suspense fallback={<SceneFallback />}>
@@ -341,13 +366,22 @@ export default function Landing() {
         </section>
 
 
-        <LandingPanel id="explore" pinned className="landing-deck-panel">
-          <LandingPresentationDeck
-            slides={deckSlides}
-            activeId={deckActiveId}
-            onSelect={(id) => scrollToSlideId(id, 'smooth')}
+        {isMobileLanding ? (
+          <LandingMobileSections
+            isAuthenticated={isAuthenticated}
+            openFaq={openFaq}
+            setOpenFaq={setOpenFaq}
+            Reveal={Reveal}
           />
-        </LandingPanel>
+        ) : (
+          <LandingPanel id="explore" pinned className="landing-deck-panel">
+            <LandingPresentationDeck
+              slides={deckSlides}
+              activeId={deckActiveId}
+              onSelect={(id) => scrollToSlideId(id, 'smooth')}
+            />
+          </LandingPanel>
+        )}
 
         <footer className="landing-footer mono">
           <div className="landing-footer-links">
