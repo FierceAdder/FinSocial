@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { UserCheck, UserPlus, TrendingUp, BarChart2, Award, ArrowLeft } from 'lucide-react';
+import { UserCheck, UserPlus, TrendingUp, BarChart2, Award, ArrowLeft, Pencil, X } from 'lucide-react';
 import apiClient from '../api/client';
 import useStore from '../store';
 import { APP_BASE } from '../constants/routes';
@@ -34,11 +34,92 @@ function StatPill({ label, value, sub }) {
   );
 }
 
+function FollowListModal({ title, users, loading, onClose, onSelectUser }) {
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="modal-card profile-follow-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-follow-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+          <X size={16} aria-hidden />
+        </button>
+        <h3 id="profile-follow-modal-title" style={{ marginBottom: 16 }}>{title}</h3>
+        {loading ? (
+          <p style={{ color: 'var(--text3)', fontSize: '.88rem' }}>Loading…</p>
+        ) : users.length === 0 ? (
+          <p style={{ color: 'var(--text3)', fontSize: '.88rem' }}>No one here yet.</p>
+        ) : (
+          <ul className="profile-follow-list">
+            {users.map((u) => (
+              <li key={u.id}>
+                <button
+                  type="button"
+                  className="profile-follow-list-item"
+                  onClick={() => onSelectUser(u.id)}
+                >
+                  <span className="profile-follow-list-av">{initials(u)}</span>
+                  <span className="profile-follow-list-meta">
+                    <strong>{u.firstName} {u.lastName}</strong>
+                    <span className="mono">@{u.username}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BioEditModal({ bio, saving, onClose, onChange, onSave }) {
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="modal-card profile-bio-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-bio-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+          <X size={16} aria-hidden />
+        </button>
+        <h3 id="profile-bio-modal-title" style={{ marginBottom: 12 }}>Edit about</h3>
+        <p style={{ fontSize: '.8rem', color: 'var(--text3)', marginBottom: 12 }}>
+          Tell others how you trade. Max 500 characters.
+        </p>
+        <textarea
+          className="form-input profile-bio-textarea"
+          rows={5}
+          maxLength={500}
+          value={bio}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="e.g. Swing trader focused on NSE large-caps…"
+        />
+        <div className="profile-bio-modal-footer">
+          <span className="mono" style={{ fontSize: '.72rem', color: 'var(--text3)' }}>
+            {bio.length}/500
+          </span>
+          <button type="button" className="btn btn-primary" disabled={saving} onClick={onSave}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── component ───────────────────────────────────────── */
 const Profile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const currentUser = useStore((s) => s.user);
+  const setUser = useStore((s) => s.setUser);
   const isOwnProfile = currentUser?.id === userId;
 
   const [profile, setProfile] = useState(null);
@@ -48,6 +129,14 @@ const Profile = () => {
   const [followLoading, setFollowLoading] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState('');
+
+  const [bioEditOpen, setBioEditOpen] = useState(false);
+  const [bioDraft, setBioDraft] = useState('');
+  const [bioSaving, setBioSaving] = useState(false);
+
+  const [followModal, setFollowModal] = useState(/** @type {null | 'followers' | 'following'} */ (null));
+  const [followList, setFollowList] = useState([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -75,6 +164,24 @@ const Profile = () => {
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
+  const openFollowModal = async (kind) => {
+    setFollowModal(kind);
+    setFollowList([]);
+    setFollowListLoading(true);
+    try {
+      const path = kind === 'followers'
+        ? `/social/users/${userId}/followers`
+        : `/social/users/${userId}/following`;
+      const res = await apiClient.get(path);
+      setFollowList(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      showToast('Could not load list');
+      setFollowModal(null);
+    } finally {
+      setFollowListLoading(false);
+    }
+  };
+
   const handleFollow = async () => {
     if (!currentUser) { navigate('/auth'); return; }
     setFollowLoading(true);
@@ -97,7 +204,28 @@ const Profile = () => {
     }
   };
 
-  /* ── loading / error states ─────────────────────────── */
+  const openBioEdit = () => {
+    setBioDraft(profile?.bio ?? '');
+    setBioEditOpen(true);
+  };
+
+  const saveBio = async () => {
+    setBioSaving(true);
+    try {
+      const res = await apiClient.patch('/social/users/me/profile', { bio: bioDraft });
+      setProfile((p) => (p ? { ...p, bio: res.data.bio } : p));
+      if (isOwnProfile && currentUser) {
+        setUser({ ...currentUser, bio: res.data.bio });
+      }
+      setBioEditOpen(false);
+      showToast('About updated');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Could not save');
+    } finally {
+      setBioSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page fade-in" id="profilePage">
@@ -132,22 +260,45 @@ const Profile = () => {
   const fullName = `${firstName} ${lastName}`;
   const joinDate = new Date(createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   const returnsPct = stats?.returnsPct ?? null;
-  const winRate = stats?.winRate != null ? Math.round(stats.winRate * 100) : null;
+  const closedSellCount = stats?.closedSellCount ?? 0;
+  const winRatioPct = stats?.winRate != null ? Math.round(stats.winRate * 100) : null;
   const tradeCount = stats?.tradeCount ?? _count?.trades ?? 0;
   const portfolioValue = stats?.portfolioValue ?? null;
 
-  /* public holdings — only show ticker + current alloc sense */
   const publicHoldings = (holdings ?? []).filter((h) => h.stock);
+  const showAboutCard = Boolean(bio || mentorBio || isOwnProfile);
 
   return (
     <div className="page fade-in" id="profilePage">
       {toast && <div className="trade-toast">{toast}</div>}
 
+      {followModal && (
+        <FollowListModal
+          title={followModal === 'followers' ? 'Followers' : 'Following'}
+          users={followList}
+          loading={followListLoading}
+          onClose={() => setFollowModal(null)}
+          onSelectUser={(id) => {
+            setFollowModal(null);
+            if (id !== userId) navigate(`${APP_BASE}/profile/${id}`);
+          }}
+        />
+      )}
+
+      {bioEditOpen && (
+        <BioEditModal
+          bio={bioDraft}
+          saving={bioSaving}
+          onClose={() => setBioEditOpen(false)}
+          onChange={setBioDraft}
+          onSave={saveBio}
+        />
+      )}
+
       <button className="stock-back" onClick={() => navigate(-1)}>
         <ArrowLeft size={14} /> Back
       </button>
 
-      {/* ── Hero card ── */}
       <div className="card profile-hero">
         <div className="profile-hero-left">
           <div className="profile-hero-av">
@@ -168,8 +319,20 @@ const Profile = () => {
               <span style={{ fontSize: '.72rem', color: 'var(--text3)' }}>Joined {joinDate}</span>
             </div>
             <div className="profile-follow-counts">
-              <span><strong>{_count?.followers ?? 0}</strong> followers</span>
-              <span><strong>{_count?.following ?? 0}</strong> following</span>
+              <button
+                type="button"
+                className="profile-follow-count-btn"
+                onClick={() => openFollowModal('followers')}
+              >
+                <strong>{_count?.followers ?? 0}</strong> followers
+              </button>
+              <button
+                type="button"
+                className="profile-follow-count-btn"
+                onClick={() => openFollowModal('following')}
+              >
+                <strong>{_count?.following ?? 0}</strong> following
+              </button>
             </div>
           </div>
         </div>
@@ -190,7 +353,6 @@ const Profile = () => {
         )}
       </div>
 
-      {/* ── Stats row ── */}
       <div className="profile-stats-row">
         <StatPill
           label="All-time Return"
@@ -198,9 +360,13 @@ const Profile = () => {
           sub={returnsPct != null ? (returnsPct >= 0 ? '▲ Profitable' : '▼ In loss') : 'No data yet'}
         />
         <StatPill
-          label="Win Rate"
-          value={winRate != null ? `${winRate}%` : '—'}
-          sub={winRate != null ? `${tradeCount} total trades` : undefined}
+          label="Win Ratio"
+          value={winRatioPct != null ? `${winRatioPct}%` : '—'}
+          sub={
+            closedSellCount > 0
+              ? `${closedSellCount} closed sell${closedSellCount !== 1 ? 's' : ''}`
+              : 'No closed sells yet'
+          }
         />
         <StatPill
           label="Total Trades"
@@ -214,17 +380,26 @@ const Profile = () => {
         )}
       </div>
 
-      {/* ── Bio / Mentor bio ── */}
-      {(bio || mentorBio) && (
+      {showAboutCard && (
         <div className="card profile-bio-card">
-          {bio && (
-            <div className="profile-bio-section">
-              <div className="profile-bio-label">About</div>
-              <p className="profile-bio-text">{bio}</p>
-            </div>
-          )}
+          <div className="profile-bio-card-head">
+            <div className="profile-bio-label">About</div>
+            {isOwnProfile && (
+              <button type="button" className="profile-bio-edit-btn" onClick={openBioEdit}>
+                <Pencil size={13} aria-hidden />
+                {bio ? 'Edit' : 'Add'}
+              </button>
+            )}
+          </div>
+          {bio ? (
+            <p className="profile-bio-text">{bio}</p>
+          ) : isOwnProfile ? (
+            <p className="profile-bio-text profile-bio-placeholder">
+              Add a short bio so others know your style and focus.
+            </p>
+          ) : null}
           {mentorBio && (
-            <div className="profile-bio-section">
+            <div className="profile-bio-section" style={{ marginTop: bio || isOwnProfile ? 14 : 0 }}>
               <div className="profile-bio-label" style={{ color: 'var(--blue)' }}>
                 <Award size={12} style={{ display: 'inline', marginRight: 4 }} />
                 Mentor note
@@ -235,7 +410,6 @@ const Profile = () => {
         </div>
       )}
 
-      {/* ── Holdings ── */}
       {publicHoldings.length > 0 && (
         <div className="card">
           <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -276,7 +450,6 @@ const Profile = () => {
         </div>
       )}
 
-      {/* ── Empty state if brand new user ── */}
       {publicHoldings.length === 0 && tradeCount === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 24px', color: 'var(--text3)' }}>
           <TrendingUp size={32} style={{ margin: '0 auto 12px', opacity: .3 }} />

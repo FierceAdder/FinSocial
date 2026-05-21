@@ -3,6 +3,7 @@ const axios = require('axios');
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 const { refreshAllSignals } = require('../services/signalRefresher');
+const { computeWinRatioFromTrades } = require('../utils/winRate');
 
 const { mlBaseUrl, genAiBaseUrl } = require('../utils/serviceUrls');
 const ML_URL = mlBaseUrl();
@@ -67,12 +68,8 @@ const startWorkers = () => {
           );
           const returnsPct = invested > 0 ? (unrealizedPnl / invested) * 100 : 0;
 
-          // Win rate: SELL trades where execution price > average cost
-          const sellTrades = periodTrades.filter((t) => t.side === 'SELL');
-          const winCount = sellTrades.length > 0
-            ? sellTrades.filter((t) => t.executionPrice > t.totalValue / t.quantity * 0.9).length
-            : 0;
-          const winRate = sellTrades.length > 0 ? winCount / sellTrades.length : 0;
+          const winRatio = computeWinRatioFromTrades(periodTrades);
+          const winRate = winRatio ?? 0;
 
           userStats.push({ userId: user.id, portfolioValue, returnsPct, tradeCount, winRate });
         }

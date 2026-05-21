@@ -1,5 +1,23 @@
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
+const { buildUserTradingStats } = require('../utils/userStats');
+
+const PUBLIC_USER_SELECT = {
+  id: true,
+  username: true,
+  firstName: true,
+  lastName: true,
+};
+
+async function loadUserForStats(userId) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      holdings: { include: { stock: { select: { price: true } } } },
+      trades: { orderBy: { timestamp: 'asc' } },
+    },
+  });
+}
 
 exports.followUser = async (req, res) => {
   try {
@@ -61,23 +79,90 @@ exports.getUserStats = async (req, res) => {
     const { userId } = req.params;
     const viewerId = req.user?.userId ?? null;
 
-    const [snap, followRow] = await Promise.all([
-      prisma.leaderboardSnapshot.findFirst({
-        where: { userId, period: 'alltime' },
-        orderBy: { computedAt: 'desc' },
-      }),
+    const [user, followRow] = await Promise.all([
+      loadUserForStats(userId),
       viewerId && viewerId !== userId
         ? prisma.follow.findFirst({ where: { followerId: viewerId, followingId: userId } })
         : Promise.resolve(null),
     ]);
 
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const live = buildUserTradingStats(user);
     res.json({
-      snapshot: snap ?? null,
+      snapshot: {
+        userId: user.id,
+        period: 'alltime',
+        ...live,
+      },
       isFollowing: !!followRow,
     });
   } catch (error) {
     logger.error('getUserStats error', { error: error.message });
     res.status(500).json({ error: 'Failed to fetch user stats' });
+  }
+};
+
+exports.updateMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const raw = req.body?.bio;
+    if (typeof raw !== 'string') {
+      return res.status(400).json({ error: 'bio must be a string' });
+    }
+    const bio = raw.trim().slice(0, 500);
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { bio: bio || null },
+      select: {
+        id: true, username: true, firstName: true, lastName: true,
+        bio: true, mentorBio: true, experienceLevel: true,
+      },
+    });
+
+    res.json(user);
+  } catch (error) {
+    logger.error('updateMyProfile error', { error: error.message });
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+};
+
+exports.getUserFollowers = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'User not found' });
+
+    const rows = await prisma.follow.findMany({
+      where: { followingId: userId },
+      include: { follower: { select: PUBLIC_USER_SELECT } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(rows.map((r) => r.follower));
+  } catch (error) {
+    logger.error('getUserFollowers error', { error: error.message });
+    res.status(500).json({ error: 'Failed to fetch followers' });
+  }
+};
+
+exports.getUserFollowing = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'User not found' });
+
+    const rows = await prisma.follow.findMany({
+      where: { followerId: userId },
+      include: { following: { select: PUBLIC_USER_SELECT } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(rows.map((r) => r.following));
+  } catch (error) {
+    logger.error('getUserFollowing error', { error: error.message });
+    res.status(500).json({ error: 'Failed to fetch following' });
   }
 };
 

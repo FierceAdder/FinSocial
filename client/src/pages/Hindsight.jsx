@@ -184,8 +184,22 @@ const Hindsight = () => {
               <div><strong>Today's Price:</strong> <span className="mono">₹{currentPrice?.toFixed(2)}</span></div>
             </div>
             <div className="trade-tabs" style={{ marginBottom: '12px' }}>
-              <button className={`trade-tab ${tradeSide === 'BUY' ? 'active' : ''}`} onClick={() => setTradeSide('BUY')}>BUY</button>
-              <button className={`trade-tab ${tradeSide === 'SELL' ? 'active' : ''}`} onClick={() => setTradeSide('SELL')}>SELL</button>
+              <button
+                type="button"
+                className={`trade-tab ${tradeSide === 'BUY' ? 'active' : ''}`}
+                data-side="BUY"
+                onClick={() => setTradeSide('BUY')}
+              >
+                BUY
+              </button>
+              <button
+                type="button"
+                className={`trade-tab ${tradeSide === 'SELL' ? 'active' : ''}`}
+                data-side="SELL"
+                onClick={() => setTradeSide('SELL')}
+              >
+                SELL
+              </button>
             </div>
             <div className="form-group">
               <label className="form-label">Quantity</label>

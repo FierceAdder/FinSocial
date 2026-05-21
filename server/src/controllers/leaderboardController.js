@@ -24,7 +24,7 @@ exports.getLeaderboard = async (req, res) => {
         },
       },
       orderBy: { rank: 'asc' },
-      take: 20,
+      take: 10,
     });
 
     res.json(snapshots);

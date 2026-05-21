@@ -478,7 +478,9 @@ const Home = () => {
   const balance = portfolioStats?.balance ?? user?.virtualBalance ?? 1000000;
   const totalPnl = portfolioStats?.totalPnl ?? 0;
 
-  const currentLb = leaderboardData[period] || [];
+  const currentLb = (leaderboardData[period] || []).slice(0, 10);
+  const podiumEntries = currentLb.slice(0, 3);
+  const leaderboardRest = currentLb.slice(3);
 
   const chartLabel =
     chartStockOptions.find((o) => o.ticker === chartTicker)?.label ||
@@ -718,10 +720,10 @@ const Home = () => {
         />
       </section>
 
-      <div className="grid-2 dashboard-section">
-        <div className="card">
+      <div className="grid-2 dashboard-section dashboard-social-grid">
+        <div className="card dashboard-feed-card">
           <div className="card-title">Community Feed</div>
-          <div id="feedList">
+          <div id="feedList" className="dashboard-feed-scroll">
             {feedItems.length === 0 ? (
               <div style={{ padding: '16px', color: 'var(--text3)', fontSize: '0.85rem' }}>
                 No activity yet. Make your first trade!
@@ -767,56 +769,133 @@ const Home = () => {
               <button className={`lb-tab ${period === 'alltime' ? 'active' : ''}`} onClick={() => setPeriod('alltime')}>All Time</button>
             </div>
           </div>
-          <div id="leaderboardContent">
+          <div id="leaderboardContent" className="dashboard-lb-body">
             {currentLb.length === 0 ? (
               <div style={{ padding: '16px', color: 'var(--text3)', fontSize: '0.85rem' }}>
                 {leaderboardData[period] === undefined ? 'Loading leaderboard…' : 'No leaderboard data yet.'}
               </div>
-            ) : currentLb.map((entry, i) => {
-              const medals = ['🥇', '🥈', '🥉'];
-              const u = entry.user;
-              const profileId = u?.id ?? entry.userId;
-              const fullName = u ? `${u.firstName} ${u.lastName}` : 'Unknown';
-              const isYou = profileId === user?.id;
-              const rowClass = `lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`;
-              const rowBody = (
-                <>
-                  <div className="lb-rank">{medals[i] || entry.rank}</div>
-                  <div className="lb-avatar">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
-                  <div className="lb-info">
-                    <div className="lb-name">
-                      {fullName}{u?.isVerified && ' ✓'}{isYou && ' (You)'}
-                    </div>
-                    <div className="lb-stats">
-                      {entry.tradeCount} trades · {Math.round(entry.winRate * 100)}% win rate
-                    </div>
+            ) : (
+              <>
+                {podiumEntries.length > 0 && (
+                  <LeaderboardPodium
+                    entries={podiumEntries}
+                    currentUserId={user?.id}
+                  />
+                )}
+                {leaderboardRest.length > 0 && (
+                  <div className="dashboard-lb-scroll">
+                    {leaderboardRest.map((entry) => (
+                      <LeaderboardRow
+                        key={entry.id}
+                        entry={entry}
+                        currentUserId={user?.id}
+                      />
+                    ))}
                   </div>
-                  <div className={`lb-returns mono ${entry.returnsPct >= 0 ? 'positive' : 'negative'}`}>
-                    {entry.returnsPct >= 0 ? '+' : ''}{entry.returnsPct.toFixed(2)}%
-                  </div>
-                </>
-              );
-              return profileId ? (
-                <Link
-                  key={entry.id}
-                  to={`${APP_BASE}/profile/${profileId}`}
-                  className={rowClass}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
-                  {rowBody}
-                </Link>
-              ) : (
-                <div key={entry.id} className={rowClass}>
-                  {rowBody}
-                </div>
-              );
-            })}
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+function profileIdForLbEntry(entry) {
+  return entry.user?.id ?? entry.userId;
+}
+
+function winRatioLabel(entry) {
+  return entry.winRate != null ? `${Math.round(entry.winRate * 100)}% win ratio` : '— win ratio';
+}
+
+function LeaderboardRow({ entry, currentUserId }) {
+  const u = entry.user;
+  const profileId = profileIdForLbEntry(entry);
+  const fullName = u ? `${u.firstName} ${u.lastName}` : 'Unknown';
+  const isYou = profileId === currentUserId;
+  const rowClass = `lb-row ${isYou ? 'lb-you' : ''}`;
+  const rowBody = (
+    <>
+      <div className="lb-rank">{entry.rank}</div>
+      <div className="lb-avatar">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
+      <div className="lb-info">
+        <div className="lb-name">
+          {fullName}{u?.isVerified && ' ✓'}{isYou && ' (You)'}
+        </div>
+        <div className="lb-stats">
+          {entry.tradeCount} trades · {winRatioLabel(entry)}
+        </div>
+      </div>
+      <div className={`lb-returns mono ${entry.returnsPct >= 0 ? 'positive' : 'negative'}`}>
+        {entry.returnsPct >= 0 ? '+' : ''}{entry.returnsPct.toFixed(2)}%
+      </div>
+    </>
+  );
+  if (profileId) {
+    return (
+      <Link
+        to={`${APP_BASE}/profile/${profileId}`}
+        className={rowClass}
+        style={{ textDecoration: 'none', color: 'inherit' }}
+      >
+        {rowBody}
+      </Link>
+    );
+  }
+  return <div className={rowClass}>{rowBody}</div>;
+}
+
+const PODIUM_ORDER = [
+  { place: 2, medal: '🥈', pedestal: 'lb-podium-pedestal--silver', slot: 'lb-podium-slot--silver' },
+  { place: 1, medal: '🥇', pedestal: 'lb-podium-pedestal--gold', slot: 'lb-podium-slot--gold' },
+  { place: 3, medal: '🥉', pedestal: 'lb-podium-pedestal--bronze', slot: 'lb-podium-slot--bronze' },
+];
+
+function LeaderboardPodium({ entries, currentUserId }) {
+  const byRank = new Map(entries.map((e) => [e.rank, e]));
+  const slots = PODIUM_ORDER
+    .map(({ place, medal, pedestal, slot }) => {
+      const entry = byRank.get(place);
+      if (!entry) return null;
+      const u = entry.user;
+      const profileId = profileIdForLbEntry(entry);
+      const fullName = u ? `${u.firstName} ${u.lastName}` : 'Unknown';
+      const isYou = profileId === currentUserId;
+      const inner = (
+        <div className={`lb-podium-slot ${slot}`}>
+          <div className="lb-podium-medal" aria-hidden>{medal}</div>
+          <div className="lb-podium-av">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
+          <div className="lb-podium-name" title={fullName}>
+            {fullName.split(' ')[0]}{isYou && ' · You'}
+          </div>
+          <div className={`lb-podium-return mono ${entry.returnsPct >= 0 ? 'positive' : 'negative'}`}>
+            {entry.returnsPct >= 0 ? '+' : ''}{entry.returnsPct.toFixed(1)}%
+          </div>
+          <div className={`lb-podium-pedestal ${pedestal}`}>
+            <span className="lb-podium-place mono">{place}</span>
+          </div>
+        </div>
+      );
+      if (profileId) {
+        return (
+          <Link
+            key={entry.id}
+            to={`${APP_BASE}/profile/${profileId}`}
+            className="lb-podium-link"
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            {inner}
+          </Link>
+        );
+      }
+      return <div key={entry.id} className="lb-podium-link">{inner}</div>;
+    })
+    .filter(Boolean);
+
+  return <div className="lb-podium" role="list" aria-label="Top 3 traders">{slots}</div>;
+}
 
 function timeAgo(date) {
   const seconds = Math.floor((new Date() - new Date(date)) / 1000);
