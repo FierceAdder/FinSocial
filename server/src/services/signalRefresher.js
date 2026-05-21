@@ -31,23 +31,50 @@ async function refreshAllSignals() {
 
       await prisma.signal.deleteMany({ where: { stockId: stock.id } });
 
+      // --- Community consensus (SentimentVote) ---
+      const sentRows = await prisma.sentimentVote.groupBy({
+        by: ['vote'],
+        where: { stockId: stock.id },
+        _count: { vote: true },
+      });
+      const sentCounts = { bullish: 0, neutral: 0, bearish: 0 };
+      sentRows.forEach((r) => { sentCounts[r.vote] = r._count.vote; });
+      const sentimentTotal = sentCounts.bullish + sentCounts.neutral + sentCounts.bearish;
+      // bullish% 0-100; neutral prior (50) when no votes exist
+      const communityScore = sentimentTotal > 0
+        ? Math.round((sentCounts.bullish / sentimentTotal) * 100)
+        : 50;
+
+      // Composite: 70% ML signal, 30% community bullish sentiment
+      const mlConfidence  = data.confidence ?? 50;
+      const compositeConf = Math.round(mlConfidence * 0.70 + communityScore * 0.30);
+
+      // Append community sentence to ML reasoning
+      const sentLabel  = communityScore >= 60 ? 'Bullish' : communityScore <= 40 ? 'Bearish' : 'Neutral';
+      const sentSuffix = sentimentTotal > 0
+        ? `Community ${sentLabel} (${communityScore}% of ${sentimentTotal} vote${sentimentTotal !== 1 ? 's' : ''})`
+        : 'No community votes yet';
+      const reasoning = `${(data.reasoning || '').replace(/\.$/, '')}. ${sentSuffix}.`;
+
       const signal = await prisma.signal.create({
         data: {
-          stockId: stock.id,
-          verdict: data.verdict,
-          confidence: data.confidence,
-          reasoning: data.reasoning || '',
-          rsi: data.technicals?.rsi || null,
-          macd: data.technicals?.macd || null,
-          buyProb: data.buy_prob != null ? data.buy_prob : null,
-          holdProb: data.hold_prob != null ? data.hold_prob : null,
-          sellProb: data.sell_prob != null ? data.sell_prob : null,
-          source: data.model_used ? 'xgboost' : 'heuristic',
+          stockId:        stock.id,
+          verdict:        data.verdict,
+          confidence:     compositeConf,
+          reasoning,
+          rsi:            data.technicals?.rsi  || null,
+          macd:           data.technicals?.macd || null,
+          buyProb:        data.buy_prob  != null ? data.buy_prob  : null,
+          holdProb:       data.hold_prob != null ? data.hold_prob : null,
+          sellProb:       data.sell_prob != null ? data.sell_prob : null,
+          communityScore,
+          sentimentTotal,
+          source:         data.model_used ? 'xgboost' : 'heuristic',
         },
         include: { stock: { select: { ticker: true, displayTicker: true } } },
       });
 
-      if (data.confidence >= 70 && (data.verdict === 'BUY' || data.verdict === 'SELL')) {
+      if (compositeConf >= 70 && (data.verdict === 'BUY' || data.verdict === 'SELL')) {
         try {
           const watchlistUsers = await prisma.watchlistItem.findMany({
             where: { stockId: stock.id },

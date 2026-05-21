@@ -79,6 +79,13 @@ const Home = () => {
   const [chartType, setChartType] = useState(DEFAULT_CHART_TYPE);
   const [showVolume, setShowVolume] = useState(true);
 
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const chartHeight = windowWidth < 600 ? 220 : 300;
   const signalsRefreshInFlightRef = useRef(false);
   const signalsSocketDebounceRef = useRef(null);
   const chartFetchRef = useRef({ base: null, intraday: null });
@@ -565,7 +572,7 @@ const Home = () => {
             onVolumeToggle={setShowVolume}
             className="chart-range-bar"
           />
-          <div className="dashboard-chart-area">
+          <div className="dashboard-chart-area" style={{ height: chartHeight }}>
             {chartLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>
                 Loading chart…
@@ -573,7 +580,7 @@ const Home = () => {
             ) : chartData.length > 0 ? (
               <MarketChart
                 data={chartData}
-                height={300}
+                height={chartHeight}
                 compact
                 chartType={chartType}
                 showVolume={showVolume}
@@ -658,6 +665,24 @@ const Home = () => {
                       <div className="conf-bar" style={{ marginBottom: '8px' }}>
                         <div className="conf-bar-fill" style={{ width: `${s.confidence}%` }} />
                       </div>
+                      {s.communityScore != null && (
+                        <div className="signal-community-row" style={{ marginBottom: '8px' }}>
+                          <span className="signal-community-label">👥 Community</span>
+                          <div className="signal-community-bar">
+                            <div
+                              className="signal-community-fill"
+                              style={{
+                                width: `${s.communityScore}%`,
+                                background: s.communityScore >= 60 ? 'var(--green)' :
+                                            s.communityScore <= 40 ? 'var(--red)' : 'var(--text3)'
+                              }}
+                            />
+                          </div>
+                          <span className="signal-community-pct mono">
+                            {s.communityScore}%{s.sentimentTotal > 0 ? ` (${s.sentimentTotal})` : ''}
+                          </span>
+                        </div>
+                      )}
                       <p className="dashboard-signal-chip-reason">{s.reasoning}</p>
                     </article>
                   );

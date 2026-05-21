@@ -273,33 +273,96 @@ def compute_signal(ticker: str, *, require_model: bool = False) -> dict:
         verdict = "BUY" if score >= 1 else ("SELL" if score <= -1 else "HOLD")
         buy_prob = 0.55 if verdict == "BUY" else (0.45 if verdict == "SELL" else 0.5)
 
+    # Extract extra indicator values from the enriched row for reasoning
+    adx_val       = float(latest.get("adx",       20.0))
+    stoch_k_val   = float(latest.get("stoch_k",   50.0))
+    vol_ratio_val = float(latest.get("vol_ratio",  1.0))
+    dist_sma20_val= float(latest.get("dist_sma20", 0.0))
+    close_val     = float(latest.get("close",      0.0))
+    sma50_val     = float(latest.get("sma_50",     close_val))
+
+    # ---- Rich, data-driven reasoning ----------------------------------------
     reasoning_parts = []
+
+    # 1. Model signal summary
     if model_used:
         horizon = model_bundle.get("label_horizon_days", 5) if model_bundle else 5
-        reasoning_parts.append(
-            f"XGBoost {horizon}d-ahead buy probability {buy_prob * 100:.1f}%"
-        )
+        is_3class = (model_bundle or {}).get("num_class", 2) == 3
+        if is_3class:
+            reasoning_parts.append(
+                f"XGBoost {horizon}d model: BUY {buy_prob*100:.0f}% · "
+                f"HOLD {hold_prob*100:.0f}% · SELL {sell_prob*100:.0f}%"
+            )
+        else:
+            reasoning_parts.append(
+                f"XGBoost {horizon}d buy probability {buy_prob*100:.0f}%"
+            )
+
+    # 2. Trend regime via ADX
+    if adx_val >= 30:
+        reasoning_parts.append(f"strong trend (ADX {adx_val:.0f})")
+    elif adx_val >= 20:
+        reasoning_parts.append(f"developing trend (ADX {adx_val:.0f})")
+    else:
+        reasoning_parts.append(f"range-bound / choppy (ADX {adx_val:.0f})")
+
+    # 3. RSI zone
     if rsi < 30:
-        reasoning_parts.append(f"RSI {rsi:.1f} oversold")
+        reasoning_parts.append(f"RSI {rsi:.0f} — oversold")
     elif rsi > 70:
-        reasoning_parts.append(f"RSI {rsi:.1f} overbought")
+        reasoning_parts.append(f"RSI {rsi:.0f} — overbought")
+    elif rsi < 45:
+        reasoning_parts.append(f"RSI {rsi:.0f} — mildly weak")
+    elif rsi > 55:
+        reasoning_parts.append(f"RSI {rsi:.0f} — mildly strong")
     else:
-        reasoning_parts.append(f"RSI {rsi:.1f} neutral")
-    if macd > macd_signal:
-        reasoning_parts.append("MACD bullish")
+        reasoning_parts.append(f"RSI {rsi:.0f} — neutral")
+
+    # 4. Stochastic %K (only noteworthy levels)
+    if stoch_k_val <= 20:
+        reasoning_parts.append(f"Stoch %K {stoch_k_val:.0f} — near lows (potential reversal zone)")
+    elif stoch_k_val >= 80:
+        reasoning_parts.append(f"Stoch %K {stoch_k_val:.0f} — near highs (momentum caution)")
+
+    # 5. MACD momentum
+    macd_hist = macd - macd_signal
+    if macd_hist > 0:
+        reasoning_parts.append("MACD histogram positive — bullish momentum")
     else:
-        reasoning_parts.append("MACD bearish")
+        reasoning_parts.append("MACD histogram negative — bearish momentum")
+
+    # 6. Volume context
+    if vol_ratio_val >= 1.5:
+        reasoning_parts.append(f"volume {vol_ratio_val:.1f}× above 20-day avg — elevated interest")
+    elif vol_ratio_val <= 0.6:
+        reasoning_parts.append(f"volume thin ({vol_ratio_val:.1f}× avg) — low conviction")
+
+    # 7. Price vs SMA-50
+    dist50_pct = ((close_val - sma50_val) / sma50_val * 100) if sma50_val else 0
+    if dist50_pct > 4:
+        reasoning_parts.append(f"{dist50_pct:.1f}% above SMA-50")
+    elif dist50_pct < -4:
+        reasoning_parts.append(f"{abs(dist50_pct):.1f}% below SMA-50")
+    # -------------------------------------------------------------------------
+
+    is_3class = model_used and (model_bundle or {}).get("num_class", 2) == 3
 
     return {
-        "ticker": ticker,
-        "verdict": verdict,
+        "ticker":     ticker,
+        "verdict":    verdict,
         "confidence": confidence,
-        "buy_prob": round(buy_prob, 4),
-        "sell_prob": round(sell_prob, 4) if "sell_prob" in dir() and model_used and (model_bundle or {}).get("num_class") == 3 else None,
-        "hold_prob": round(hold_prob, 4) if "hold_prob" in dir() and model_used and (model_bundle or {}).get("num_class") == 3 else None,
+        "buy_prob":   round(buy_prob, 4),
+        "sell_prob":  round(sell_prob, 4)  if is_3class else None,
+        "hold_prob":  round(hold_prob, 4)  if is_3class else None,
         "model_used": model_used,
-        "reasoning": ". ".join(reasoning_parts) + ".",
-        "technicals": tech,
+        "reasoning":  ". ".join(reasoning_parts) + ".",
+        "technicals": {
+            **tech,
+            "adx":       round(adx_val, 1),
+            "stoch_k":   round(stoch_k_val, 1),
+            "vol_ratio": round(vol_ratio_val, 2),
+            "dist_sma50_pct": round(dist50_pct, 2),
+        },
     }
 
 

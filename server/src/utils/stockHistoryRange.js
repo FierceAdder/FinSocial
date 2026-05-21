@@ -56,7 +56,16 @@ function latestSessionBars(quotes, ticker) {
   if (!valid.length) return [];
   const sorted = [...valid].sort((a, b) => new Date(a.date) - new Date(b.date));
   const lastKey = marketDayKey(sorted[sorted.length - 1].date, ticker);
-  return sorted.filter((q) => marketDayKey(q.date, ticker) === lastKey);
+  let session = sorted.filter((q) => marketDayKey(q.date, ticker) === lastKey);
+  
+  if (session.length < 2) {
+    const prevValid = sorted.filter((q) => marketDayKey(q.date, ticker) !== lastKey);
+    if (prevValid.length) {
+      const prevKey = marketDayKey(prevValid[prevValid.length - 1].date, ticker);
+      session = sorted.filter((q) => marketDayKey(q.date, ticker) === prevKey);
+    }
+  }
+  return session;
 }
 
 function mapHistoryResponse(bars) {
@@ -69,6 +78,10 @@ function sliceDailyBars(bars, range) {
 }
 
 async function fetchYahooIntraday(ticker) {
+  const cacheKey = `yahoo:intraday:${ticker}`;
+  const cached = historyCache.get(cacheKey);
+  if (cached) return cached;
+
   const period2 = new Date();
   const period1 = new Date();
   period1.setDate(period1.getDate() - 7);
@@ -78,7 +91,7 @@ async function fetchYahooIntraday(ticker) {
       const chart = await yf.chart(ticker, { period1, period2, interval });
       const session = latestSessionBars(chart?.quotes, ticker);
       if (session.length >= 2) {
-        return session.map((q) => ({
+        const mapped = session.map((q) => ({
           date: new Date(q.date),
           open: q.open,
           high: q.high ?? q.open,
@@ -86,6 +99,8 @@ async function fetchYahooIntraday(ticker) {
           close: q.close,
           volume: q.volume ?? 0,
         }));
+        historyCache.set(cacheKey, mapped);
+        return mapped;
       }
     } catch (e) {
       logger.warn('Intraday chart fetch failed', { ticker, interval, error: e.message });

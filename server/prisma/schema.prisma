@@ -127,19 +127,21 @@ model SentimentVote {
 }
 
 model Signal {
-  id         String   @id @default(uuid())
-  stockId    String
-  stock      Stock    @relation(fields: [stockId], references: [id])
-  verdict    String   // BUY | SELL | HOLD
-  confidence Int      // 0-100
-  reasoning  String
-  rsi        Float?
-  macd       Float?
-  buyProb    Float?   // 3-class model: P(BUY)
-  holdProb   Float?   // 3-class model: P(HOLD)
-  sellProb   Float?   // 3-class model: P(SELL)
-  source     String   @default("ml") // ml | community
-  createdAt  DateTime @default(now())
+  id             String   @id @default(uuid())
+  stockId        String
+  stock          Stock    @relation(fields: [stockId], references: [id])
+  verdict        String   // BUY | SELL | HOLD
+  confidence     Int      // 0-100 composite (70% ML + 30% community)
+  reasoning      String
+  rsi            Float?
+  macd           Float?
+  buyProb        Float?   // 3-class model: P(BUY)
+  holdProb       Float?   // 3-class model: P(HOLD)
+  sellProb       Float?   // 3-class model: P(SELL)
+  communityScore Int?     // 0-100: (bullish_votes / total_votes) × 100
+  sentimentTotal Int?     // raw vote count for transparency
+  source         String   @default("ml") // ml | community
+  createdAt      DateTime @default(now())
 
   @@index([stockId, createdAt])
 }

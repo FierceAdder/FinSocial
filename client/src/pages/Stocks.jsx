@@ -116,6 +116,14 @@ const Stocks = () => {
   const [chartType, setChartType] = useState(DEFAULT_CHART_TYPE);
   const [showVolume, setShowVolume] = useState(true);
 
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const chartHeight = windowWidth < 600 ? 220 : 280;
+
   useEffect(() => {
     const silentList = isStocksListFresh(user?.id);
     const silentWl = isWatchlistFresh(user?.id);
@@ -393,7 +401,7 @@ const Stocks = () => {
             onVolumeToggle={setShowVolume}
             className="chart-range-bar"
           />
-          <div className="stock-chart-panel" style={{ height: 280 }}>
+          <div className="stock-chart-panel" style={{ height: chartHeight }}>
             {chartLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>
                 Updating chart...
@@ -401,7 +409,7 @@ const Stocks = () => {
             ) : chartData.length > 0 ? (
               <MarketChart
                 data={chartData}
-                height={280}
+                height={chartHeight}
                 chartType={chartType}
                 showVolume={showVolume}
                 interval={interval === 'intraday' ? 'intraday' : '1d'}
@@ -486,6 +494,24 @@ const Stocks = () => {
                   <div className="conf-bar-fill" style={{ width: `${sig.confidence}%` }} />
                 )}
               </div>
+              {sig.communityScore != null && (
+                <div className="signal-community-row" style={{ marginBottom: '12px' }}>
+                  <span className="signal-community-label">👥 Community</span>
+                  <div className="signal-community-bar">
+                    <div
+                      className="signal-community-fill"
+                      style={{
+                        width: `${sig.communityScore}%`,
+                        background: sig.communityScore >= 60 ? 'var(--green)' :
+                                    sig.communityScore <= 40 ? 'var(--red)' : 'var(--text3)'
+                      }}
+                    />
+                  </div>
+                  <span className="signal-community-pct mono">
+                    {sig.communityScore}%{sig.sentimentTotal > 0 ? ` (${sig.sentimentTotal})` : ''}
+                  </span>
+                </div>
+              )}
               <p style={{ fontSize: '.85rem', color: 'var(--text2)', lineHeight: 1.6 }}>{sig.reasoning}</p>
               {sig.rsi && (
                 <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '0.78rem', color: 'var(--text3)' }}>

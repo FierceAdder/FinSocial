@@ -1578,3 +1578,75 @@ body[data-page=landing]{
 }
 
 @media(max-width:768px){.landing-hero-copy{max-width:none}}
+
+/* Feature 1C - Community Bar */
+.signal-community-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.72rem;
+}
+.signal-community-label { color: var(--text3); min-width: 72px; }
+.signal-community-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.signal-community-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.signal-community-pct { color: var(--text2); min-width: 40px; text-align: right; }
+
+/* Feature 3A - Dashboard stat cards */
+@media (max-width: 600px) {
+  .home-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-val { font-size: 1.1rem; }
+}
+
+/* Feature 3B - Chart range tabs */
+@media (max-width: 600px) {
+  .chart-range-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .chart-range-tabs .lb-tab {
+    font-size: 0.7rem;
+    padding: 3px 7px;
+    min-width: 32px;
+  }
+}
+
+/* Feature 3C - Stock detail view */
+@media (max-width: 768px) {
+  .stock-detail-cols,
+  .stock-detail-view .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .stock-detail-view .chart-card {
+    min-height: 260px;
+  }
+}
+
+/* Feature 3E - Dashboard market row stacking */
+@media (max-width: 900px) {
+  .dashboard-market-row {
+    flex-direction: column;
+  }
+  .dashboard-market-main {
+    width: 100%;
+  }
+  .dashboard-market-trending {
+    width: 100%;
+  }
+  .dashboard-market-row .dashboard-signals-panel {
+    width: 100%;
+  }
+}
