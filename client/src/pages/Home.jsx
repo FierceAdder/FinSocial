@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import useStore from '../store';
 import apiClient from '../api/client';
 import { useSocket } from '../hooks/useSocket';
@@ -407,7 +407,6 @@ const Home = () => {
   }, [chartRange, chartBaseHistory, chart1dHistory, chartInterval]);
 
   useEffect(() => {
-    if (leaderboardData[period] !== undefined) return;
     apiClient
       .get(`/leaderboard?period=${period}`)
       .then((r) => {
@@ -420,12 +419,13 @@ const Home = () => {
       })
       .catch(() => {
         setLeaderboardData((prev) => {
+          if (prev[period] !== undefined) return prev;
           const next = { ...prev, [period]: [] };
           persistDashboard({ leaderboardData: next });
           return next;
         });
       });
-  }, [period, leaderboardData, persistDashboard]);
+  }, [period, persistDashboard]);
 
   useEffect(() => {
     const home = getDashboardCache();
@@ -775,19 +775,16 @@ const Home = () => {
             ) : currentLb.map((entry, i) => {
               const medals = ['🥇', '🥈', '🥉'];
               const u = entry.user;
+              const profileId = u?.id ?? entry.userId;
               const fullName = u ? `${u.firstName} ${u.lastName}` : 'Unknown';
-              const isYou = u?.id === user?.id;
-              return (
-                <div
-                  key={entry.id}
-                  className={`lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`}
-                  style={{ cursor: u?.id ? 'pointer' : 'default' }}
-                  onClick={() => u?.id && navigate(`${APP_BASE}/profile/${u.id}`)}
-                >
+              const isYou = profileId === user?.id;
+              const rowClass = `lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`;
+              const rowBody = (
+                <>
                   <div className="lb-rank">{medals[i] || entry.rank}</div>
                   <div className="lb-avatar">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
-                <div className="lb-info">
-                  <div className="lb-name">
+                  <div className="lb-info">
+                    <div className="lb-name">
                       {fullName}{u?.isVerified && ' ✓'}{isYou && ' (You)'}
                     </div>
                     <div className="lb-stats">
@@ -797,6 +794,20 @@ const Home = () => {
                   <div className={`lb-returns mono ${entry.returnsPct >= 0 ? 'positive' : 'negative'}`}>
                     {entry.returnsPct >= 0 ? '+' : ''}{entry.returnsPct.toFixed(2)}%
                   </div>
+                </>
+              );
+              return profileId ? (
+                <Link
+                  key={entry.id}
+                  to={`${APP_BASE}/profile/${profileId}`}
+                  className={rowClass}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  {rowBody}
+                </Link>
+              ) : (
+                <div key={entry.id} className={rowClass}>
+                  {rowBody}
                 </div>
               );
             })}

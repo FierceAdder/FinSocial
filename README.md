@@ -116,10 +116,26 @@ Takes a few minutes for all tickers.
 
 - **Market chart** — [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/) (`lightweight-charts`) with type switcher (candles, bars, line, area) and volume histogram; OHLC from Alpha Vantage when `ALPHAVANTAGE_API_KEY` is set (Yahoo/DB fallback). **1D** range polls every ~90s for the active ticker.
 - **Configurable symbol** — Pick any listed stock; choice is saved per user in `localStorage` and survives reload.
+- **Chart requests** — Dashboard chart fetches use `skipQuote=1` so reloads do not hammer live quote APIs.
 - **Signal board** — Random sample of 5 latest ML signals; **Generate signals** runs `/predict` for all stocks on demand.
 - **Active signals stat** — Counts **all** stocks’ latest signals (BUY / SELL / HOLD), not only the 5 on the board.
+- **Signal refresh** — One latest `Signal` row per stock (`deleteMany` then `create`); Socket.IO emits a single debounced `signals:refreshed` event (not per-stock storms).
 - **Trending strip** — Top movers; **market news** with manual refresh.
-- **Community feed & leaderboard** — Weekly / monthly / all-time.
+- **Community feed & leaderboard** — Weekly / monthly / all-time; leaderboard rows link to user profiles (`userId`).
+
+### Client caching (stale-while-revalidate)
+
+- In-memory cache (~3 min TTL, per user) in `client/src/utils/appCache.js` for **Home**, **Stocks**, **Portfolio**, **Forum**, **Tribe**, and **Hindsight**.
+- Revisiting a page shows the last payload immediately while refreshing in the background.
+- Chart OHLC is shared per ticker across Home, Stocks, and Hindsight.
+- Cache clears on **logout**. See [client/README.md](client/README.md).
+
+### Auth & navigation
+
+- **Landing** (`/`) — Marketing site; unauthenticated users are sent here (not `/auth`) when opening protected routes.
+- **Sign-in / sign-up** — Show/hide password toggle; wrong credentials stay on the form (401 does not trigger a global logout redirect).
+- **Logout** — Clears session and returns to `/`.
+- **Deep links** — `/app/stocks?ticker=RELIANCE.NS` opens stock detail; profile holdings use the full API ticker; leaderboard opens `/app/profile/:userId`.
 
 ### ML signals
 
@@ -128,7 +144,8 @@ Takes a few minutes for all tickers.
 - **Label thresholds:** BUY = 5-day forward return > **+1.5%**, SELL < **−1.5%**, HOLD otherwise. Wider band produces purer labels vs the original ±1%.
 - **Class-balanced training** via inverse-frequency sample weights — prevents majority-class collapse.
 - **Inference:** `buy_prob`, `hold_prob`, `sell_prob` (softmax outputs) exposed in every `/predict` response and stored in the `Signal` table (`buyProb`, `holdProb`, `sellProb` columns).
-- **UX bias:** A small configurable `ML_BUY_BIAS` (default `0.03`) nudges borderline decisions toward BUY; a confidence floor rejects sub-random BUYs (buy_prob < 0.333).
+- **UX bias:** A small configurable `ML_BUY_BIAS` (default `0.04`) nudges borderline 3-class decisions toward BUY; a confidence floor rejects sub-random BUYs (buy_prob < 0.333).
+- **Legacy bundles:** If the loaded pickle is an older **binary** model (`num_class: 2`), inference uses BUY > 0.52 / SELL < 0.42 / else HOLD with verdict-specific confidence scaling.
 - **Probability tooltip:** Hover any Signal badge in the Stocks table to see a live BUY / HOLD / SELL probability bar breakdown.
 - **Auto-refresh:** Bull cron every **5 minutes** (requires Redis + running workers).
 - **Manual refresh:** `POST /api/feed/signals/refresh` from the dashboard button.
@@ -136,10 +153,13 @@ Takes a few minutes for all tickers.
 
 ### Social & AI
 
+- **Profiles** — View any user at `/app/profile/:userId`; follow/unfollow; public holdings (ticker + display name).
+- **Leaderboard** — Weekly / monthly / all-time ranks; click a row to open that user’s profile.
+- **Holdings → Stocks** — Click a holding on a profile to open `/app/stocks?ticker=…` for that symbol.
 - **Tribe** — Real-time channels; polls (`/poll Buy/Sell/Hold TICKER?`); FinBot in-channel.
-- **Forum** — Voting, accepted answers, AI-suggested replies.
+- **Forum** — Voting, accepted answers; shows an empty/error state on API failure (no mock fallback data).
 - **FinBot** — Gemini + RAG; model chain (`gemini-3-flash-preview` → `gemini-3.1-flash-lite`); keyword fallback if all models fail.
-- **Sentiment** — Per-stock community votes.
+- **Sentiment** — Per-stock community votes; blended into stored signal confidence (70% ML / 30% community).
 - **Hindsight** — Replay a historical date and estimate P&amp;L.
 
 ### Background jobs (core-api)
@@ -312,7 +332,7 @@ cd gen-ai-service && pytest test_health.py -v
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `DATABASE_URL` | Yes | For DB-backed feature engineering and training |
-| `ML_BUY_BIAS` | No | Nudge bias added to `buy_prob` before argmax (default `0.03`). Increase to show more BUY signals; decrease for stricter calls. |
+| `ML_BUY_BIAS` | No | Nudge bias added to `buy_prob` before argmax (default `0.04`). Increase to show more BUY signals; decrease for stricter calls. |
 | `ML_LABEL_THRESHOLD` | No | Forward-return threshold for BUY label (default `0.015` = 1.5%). |
 | `ML_LABEL_SELL_THRESHOLD` | No | Forward-return threshold for SELL label (default `-0.015`). |
 | `DISABLE_FINBERT` | No | Set `1` on 512MB Render instances. |
@@ -340,6 +360,10 @@ See each service’s `.env.example` for the full list.
 | Charts flat / Hindsight empty | Run `npm run import-history`. |
 | ML always heuristic | Retrain model; confirm `/ml/health` shows `model_version: 5, model_loaded: true`. |
 | Probability tooltip missing | Run `POST /api/feed/signals/refresh` — old Signal rows predate `buyProb`/`holdProb`/`sellProb` columns. |
+| Leaderboard click does nothing | Hard refresh once (stale dashboard cache); ensure API returns `userId` on each row; client links use `userId` or `user.id`. |
+| Profile holding opens stock list only | Restart core-api after profile API change; holdings need `stock.ticker` (fallback: `displayTicker.NS`). |
+| Wrong password sends you to landing | Deploy latest client (`skipAuthRedirect` on `/auth/login` and `/auth/register`). |
+| Logout lands on `/auth` | Deploy latest client — logout and protected-route redirect go to `/`. |
 | Landing deck scroll stuck | Hard refresh; ensure you are on latest client build. |
 
 ---

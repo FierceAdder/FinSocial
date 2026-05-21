@@ -20,7 +20,7 @@ const Landing = lazy(() => import('./pages/Landing'));
 
 const ProtectedRoute = ({ children }) => {
   const isAuthenticated = useStore((state) => state.isAuthenticated);
-  return isAuthenticated ? children : <Navigate to="/auth" />;
+  return isAuthenticated ? children : <Navigate to="/" replace />;
 };
 
 function App() {

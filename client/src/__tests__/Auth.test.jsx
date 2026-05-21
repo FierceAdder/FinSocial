@@ -56,4 +56,34 @@ describe('Auth Page', () => {
     renderAuth();
     expect(screen.getAllByText(/finsocial/i).length).toBeGreaterThan(0);
   });
+
+  it('shows error on failed login without redirecting', async () => {
+    const apiClient = (await import('../api/client')).default;
+    renderAuth();
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), {
+      target: { value: 'bad@example.com' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('••••••••'), {
+      target: { value: 'wrongpass' },
+    });
+    const submit = screen.getAllByRole('button', { name: /^sign in$/i })
+      .find((b) => b.getAttribute('type') === 'submit');
+    fireEvent.click(submit);
+    expect(await screen.findByText('Test error')).toBeTruthy();
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/auth/login',
+      { email: 'bad@example.com', password: 'wrongpass' },
+      { skipAuthRedirect: true },
+    );
+  });
+
+  it('toggles password visibility', () => {
+    renderAuth();
+    const input = screen.getByPlaceholderText('••••••••');
+    expect(input).toHaveAttribute('type', 'password');
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(input).toHaveAttribute('type', 'text');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(input).toHaveAttribute('type', 'password');
+  });
 });

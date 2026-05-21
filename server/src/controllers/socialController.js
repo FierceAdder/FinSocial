@@ -91,7 +91,7 @@ exports.getUserProfile = async (req, res) => {
         avatarUrl: true, bio: true, mentorBio: true, experienceLevel: true,
         isVerified: true, verifiedReason: true, createdAt: true,
         _count: { select: { followers: true, following: true, trades: true } },
-        holdings: { include: { stock: { select: { displayTicker: true, price: true } } } },
+        holdings: { include: { stock: { select: { ticker: true, displayTicker: true, price: true } } } },
       }
     });
 

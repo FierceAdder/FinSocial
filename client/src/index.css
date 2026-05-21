@@ -435,6 +435,13 @@ table.data-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .auth-tab:hover:not(.active){background:var(--bg2)}
 .auth-form{display:flex;flex-direction:column;gap:0}
 .auth-form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.auth-password-wrap{position:relative;display:flex;align-items:center}
+.auth-password-input{padding-right:42px;width:100%}
+.auth-password-toggle{
+  position:absolute;right:10px;display:flex;align-items:center;justify-content:center;
+  padding:4px;border:none;background:transparent;color:var(--text3);cursor:pointer;border-radius:6px
+}
+.auth-password-toggle:hover{color:var(--text);background:var(--bg2)}
 .auth-submit{width:100%;padding:12px;font-size:.95rem}
 .auth-divider{display:flex;align-items:center;gap:12px;margin:18px 0;font-size:.78rem;color:var(--text3)}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}

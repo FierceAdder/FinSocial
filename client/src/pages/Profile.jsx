@@ -15,6 +15,15 @@ const levelLabel = (lvl) =>
 const levelColor = (lvl) =>
   lvl === 'advanced' ? 'badge-green' : lvl === 'intermediate' ? 'badge-blue' : 'badge-gray';
 
+/** Full API ticker (e.g. RELIANCE.NS) for stocks deep-link; profile API may only send displayTicker. */
+const holdingStockTicker = (stock) => {
+  if (!stock) return '';
+  if (stock.ticker) return stock.ticker;
+  const d = stock.displayTicker?.trim();
+  if (!d) return '';
+  return d.includes('.') ? d : `${d}.NS`;
+};
+
 function StatPill({ label, value, sub }) {
   return (
     <div className="profile-stat-pill">
@@ -241,14 +250,19 @@ const Profile = () => {
               const pnlPct = h.averageCost > 0
                 ? ((h.stock.price - h.averageCost) / h.averageCost) * 100
                 : 0;
+              const stockTicker = holdingStockTicker(h.stock);
+              const goToStock = () => {
+                if (!stockTicker) return;
+                navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(stockTicker)}`);
+              };
               return (
                 <div
                   key={h.id}
                   className="profile-holding-chip"
-                  onClick={() => navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(h.stock.ticker || '')}`)}
+                  onClick={goToStock}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`${APP_BASE}/stocks?ticker=${encodeURIComponent(h.stock.ticker || '')}`)}
+                  onKeyDown={(e) => e.key === 'Enter' && goToStock()}
                 >
                   <div className="profile-holding-ticker mono">{h.stock.displayTicker}</div>
                   <div className="profile-holding-qty">{h.totalQuantity} shares</div>

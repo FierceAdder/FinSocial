@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import useStore from '../store';
 import apiClient from '../api/client';
 import { APP_BASE } from '../constants/routes';
@@ -18,6 +19,7 @@ const Auth = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [experienceLevel, setExperienceLevel] = useState('beginner');
+  const [showPassword, setShowPassword] = useState(false);
 
   if (isAuthenticated) return <Navigate to={APP_BASE} replace />;
 
@@ -32,7 +34,7 @@ const Auth = () => {
         ? { email, password }
         : { email, password, firstName, lastName, experienceLevel };
 
-      const response = await apiClient.post(endpoint, payload);
+      const response = await apiClient.post(endpoint, payload, { skipAuthRedirect: true });
       const { token, user } = response.data;
       setAuth(user, token);
       navigate(APP_BASE);
@@ -61,13 +63,13 @@ const Auth = () => {
           <div className="auth-tabs">
             <button 
               className={`auth-tab ${tab === 'login' ? 'active' : ''}`} 
-              onClick={() => { setTab('login'); setError(''); }}
+              onClick={() => { setTab('login'); setError(''); setShowPassword(false); }}
             >
               Sign In
             </button>
             <button 
               className={`auth-tab ${tab === 'register' ? 'active' : ''}`} 
-              onClick={() => { setTab('register'); setError(''); }}
+              onClick={() => { setTab('register'); setError(''); setShowPassword(false); }}
             >
               Create Account
             </button>
@@ -106,10 +108,28 @@ const Auth = () => {
             </div>
             
             <div className="form-group">
-              <label className="form-label">Password</label>
-              <input className="form-input" type="password" 
-                placeholder={tab === 'login' ? "••••••••" : "Min. 8 characters"} required
-                value={password} onChange={(e) => setPassword(e.target.value)} />
+              <label className="form-label" htmlFor="auth-password">Password</label>
+              <div className="auth-password-wrap">
+                <input
+                  id="auth-password"
+                  className="form-input auth-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={tab === 'login' ? '••••••••' : 'Min. 8 characters'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
+                </button>
+              </div>
             </div>
 
             {tab === 'login' ? (

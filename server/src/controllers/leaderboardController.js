@@ -11,7 +11,17 @@ exports.getLeaderboard = async (req, res) => {
     const snapshots = await prisma.leaderboardSnapshot.findMany({
       where: { period },
       include: {
-        user: { select: { username: true, firstName: true, lastName: true, avatarUrl: true, isVerified: true, experienceLevel: true } }
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            isVerified: true,
+            experienceLevel: true,
+          },
+        },
       },
       orderBy: { rank: 'asc' },
       take: 20,
