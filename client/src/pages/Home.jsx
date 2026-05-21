@@ -735,7 +735,12 @@ const Home = () => {
               const actorInitials = f.actor?.initials || '?';
               return (
                 <div key={f.id || idx} className={`feed-item ${f.isLive ? 'feed-item-live' : ''}`}>
-                  <div className="feed-av" title={actorLabel}>{actorInitials}</div>
+                  <div
+                    className="feed-av"
+                    title={actorLabel}
+                    style={{ cursor: f.actor?.id ? 'pointer' : 'default' }}
+                    onClick={() => f.actor?.id && navigate(`${APP_BASE}/profile/${f.actor.id}`)}
+                  >{actorInitials}</div>
                 <div className="feed-body">
                     <strong>{actorLabel}</strong>
                     {' '}{side === 'BUY' ? 'bought' : 'sold'}{' '}
@@ -773,7 +778,12 @@ const Home = () => {
               const fullName = u ? `${u.firstName} ${u.lastName}` : 'Unknown';
               const isYou = u?.id === user?.id;
               return (
-                <div key={entry.id} className={`lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`}>
+                <div
+                  key={entry.id}
+                  className={`lb-row ${isYou ? 'lb-you' : ''} ${i < 3 ? 'lb-top' : ''}`}
+                  style={{ cursor: u?.id ? 'pointer' : 'default' }}
+                  onClick={() => u?.id && navigate(`${APP_BASE}/profile/${u.id}`)}
+                >
                   <div className="lb-rank">{medals[i] || entry.rank}</div>
                   <div className="lb-avatar">{u?.firstName?.[0]}{u?.lastName?.[0]}</div>
                 <div className="lb-info">

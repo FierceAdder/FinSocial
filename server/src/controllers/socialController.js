@@ -56,6 +56,31 @@ exports.getMentors = async (req, res) => {
   }
 };
 
+exports.getUserStats = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const viewerId = req.user?.userId ?? null;
+
+    const [snap, followRow] = await Promise.all([
+      prisma.leaderboardSnapshot.findFirst({
+        where: { userId, period: 'alltime' },
+        orderBy: { computedAt: 'desc' },
+      }),
+      viewerId && viewerId !== userId
+        ? prisma.follow.findFirst({ where: { followerId: viewerId, followingId: userId } })
+        : Promise.resolve(null),
+    ]);
+
+    res.json({
+      snapshot: snap ?? null,
+      isFollowing: !!followRow,
+    });
+  } catch (error) {
+    logger.error('getUserStats error', { error: error.message });
+    res.status(500).json({ error: 'Failed to fetch user stats' });
+  }
+};
+
 exports.getUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;

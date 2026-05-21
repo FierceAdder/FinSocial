@@ -11,8 +11,10 @@ import Forum from './pages/Forum';
 import ForumDetail from './pages/ForumDetail';
 import Tribe from './pages/Tribe';
 import Hindsight from './pages/Hindsight';
+import Profile from './pages/Profile';
 import apiClient from './api/client';
 import { APP_BASE } from './constants/routes';
+
 
 const Landing = lazy(() => import('./pages/Landing'));
 
@@ -64,6 +66,8 @@ function App() {
           <Route path="tribe" element={<Tribe />} />
           <Route path="hindsight" element={<Hindsight />} />
           <Route path="time-machine" element={<Navigate to="hindsight" replace />} />
+          <Route path="profile/:userId" element={<Profile />} />
+
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

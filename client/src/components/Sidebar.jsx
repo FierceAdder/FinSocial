@@ -1,12 +1,15 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import useStore from '../store';
 import { useLogout } from '../hooks/useLogout';
-import { Home, Users, MessageSquare, Briefcase, TrendingUp, LogOut, Bell, Clock } from 'lucide-react';
+import { Home, Users, MessageSquare, Briefcase, TrendingUp, LogOut, Bell, Clock, UserCircle } from 'lucide-react';
 import { APP_BASE } from '../constants/routes';
+
 
 const Sidebar = ({ onNotifClick, mobileOpen }) => {
   const { user, unreadCount } = useStore();
   const handleLogout = useLogout();
+  const navigate = useNavigate();
+
 
   const navItems = [
     { to: APP_BASE, icon: <Home size={18} />, label: 'Home' },
@@ -15,7 +18,9 @@ const Sidebar = ({ onNotifClick, mobileOpen }) => {
     { to: `${APP_BASE}/portfolio`, icon: <Briefcase size={18} />, label: 'Portfolio' },
     { to: `${APP_BASE}/stocks`, icon: <TrendingUp size={18} />, label: 'Stocks' },
     { to: `${APP_BASE}/hindsight`, icon: <Clock size={18} />, label: 'Hindsight' },
+    ...(user ? [{ to: `${APP_BASE}/profile/${user.id}`, icon: <UserCircle size={18} />, label: 'My Profile' }] : []),
   ];
+
 
   return (
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} id="sidebar">
@@ -50,7 +55,13 @@ const Sidebar = ({ onNotifClick, mobileOpen }) => {
       </nav>
 
       {user && (
-        <div className="sidebar-profile" id="sidebarProfile">
+        <div
+          className="sidebar-profile"
+          id="sidebarProfile"
+          style={{ cursor: 'pointer' }}
+          onClick={() => navigate(`${APP_BASE}/profile/${user.id}`)}
+          title="View my profile"
+        >
           <div className="profile-av">{user.firstName?.[0]}{user.lastName?.[0]}</div>
           <div className="profile-meta">
             <strong>
@@ -59,11 +70,16 @@ const Sidebar = ({ onNotifClick, mobileOpen }) => {
             </strong>
             <span>{user.experienceLevel === 'advanced' ? 'Verified Trader' : user.experienceLevel === 'intermediate' ? 'Intermediate' : 'Beginner'}</span>
           </div>
-          <button className="logout-btn" onClick={handleLogout} title="Sign out">
+          <button
+            className="logout-btn"
+            onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+            title="Sign out"
+          >
             <LogOut size={16} />
           </button>
         </div>
       )}
+
     </aside>
   );
 };
